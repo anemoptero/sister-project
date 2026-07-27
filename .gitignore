@@ -1,0 +1,21 @@
+node_modules/
+dist/
+dist-ssr/
+
+# 環境變數，.env.example 除外
+.env
+.env.*
+!.env.example
+
+# 機密檔案，絕不可 commit
+*service-account*.json
+*serviceAccount*.json
+*.pem
+*.key
+
+*.local
+*.log
+npm-debug.log*
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
