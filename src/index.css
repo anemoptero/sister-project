@@ -40,14 +40,88 @@ img {
   font-size: 0.9rem;
 }
 
+code {
+  background: #f1f3f5;
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+/* --- 全站外框 --- */
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 12px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.app-brand {
+  font-weight: 700;
+  text-decoration: none;
+  color: inherit;
+}
+
+/* 手機上導覽項目可能放不下，允許橫向捲動而非撐破版面。
+   -webkit-overflow-scrolling 讓 iOS 的慣性捲動正常。 */
+.app-nav {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.app-nav a {
+  white-space: nowrap;
+  text-decoration: none;
+  color: #374151;
+  padding: 4px 0;
+}
+
+.app-nav a.active {
+  color: #111827;
+  border-bottom: 2px solid #111827;
+}
+
+/* 帳號區在手機上換行後靠左，桌面版推到最右 */
+.app-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-username {
+  font-size: 0.9rem;
+  color: #6b7280;
+  max-width: 10ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (min-width: 768px) {
   .page {
     padding: 32px 24px;
+  }
+
+  .app-account {
+    margin-left: auto;
+  }
+
+  .app-username {
+    max-width: 20ch;
   }
 }
 
 @media (min-width: 1024px) {
   .page {
     padding: 40px 32px;
+  }
+
+  .app-header {
+    padding: 16px 32px;
   }
 }

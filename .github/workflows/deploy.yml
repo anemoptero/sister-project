@@ -1,0 +1,65 @@
+name: Deploy to GitHub Pages
+
+# 只有 main 有變動時才建置發佈。手動觸發保留給「程式沒改但要重新部署」的情況，
+# 例如在 repo secrets 換了 VITE_LIFF_ID —— 那不會產生 commit，但必須重新 build
+# 才會進 bundle。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# GITHUB_TOKEN 的最小權限：讀 repo、寫 Pages、取得 OIDC id-token 供部署驗證。
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時只跑一個部署。取消進行中的舊部署會讓中途的發佈處於未知狀態，
+# 所以是排隊而非取消。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 對齊本機的 Node 20（package.json 的 Vite 停在 v6 也是為了這條線）
+          node-version: '20'
+          cache: npm
+
+      # 用 npm ci 而非 npm install：完全依 package-lock.json 安裝，
+      # 確保 CI 裝到的版本與本機驗證過的一致。
+      - run: npm ci
+
+      # build script 已包含 tsc --noEmit，型別錯誤會在這裡擋下來。
+      - run: npm run build
+        env:
+          # VITE_ 變數在 build 當下被寫死進 bundle，執行期無法再注入，
+          # 所以必須在這裡提供。兩者都是公開值（LIFF ID 與 Web App 網址），
+          # 但仍走 repo secrets，避免網址變更時要改動程式碼。
+          #
+          # ⚠️ Channel secret、service account key 絕不可放這裡 ——
+          # 任何人都能從 bundle 讀出 VITE_ 開頭的值。
+          VITE_APPS_SCRIPT_URL: ${{ secrets.VITE_APPS_SCRIPT_URL }}
+          VITE_LIFF_ID: ${{ secrets.VITE_LIFF_ID }}
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
