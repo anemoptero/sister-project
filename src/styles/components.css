@@ -664,3 +664,75 @@ button.small {
 .data-table .checkbox {
   justify-content: flex-start;
 }
+
+/* ==========================================================================
+   分頁與標籤選擇
+   ========================================================================== */
+
+.tabs {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-bottom: var(--border-width) solid var(--color-border);
+  margin-bottom: var(--space-5);
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  background: transparent;
+  color: var(--color-text-muted);
+  border: none;
+  border-radius: 0;
+  padding: var(--space-3) var(--space-4);
+  white-space: nowrap;
+  /* 底線與容器的 border 重疊，選中時蓋過去，不會讓整列高度跳動 */
+  margin-bottom: calc(var(--border-width) * -1);
+  border-bottom: 2px solid transparent;
+}
+
+.tab:hover:not(:disabled) {
+  background: transparent;
+  color: var(--color-text);
+}
+
+.tab.is-active {
+  color: var(--color-text);
+  border-bottom-color: var(--color-primary);
+}
+
+/* 多選標籤：適用產品、星期、會員 */
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.chip {
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 6px var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border: var(--border-width) solid var(--color-border-strong);
+}
+
+.chip:hover:not(:disabled) {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+.chip.is-on {
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+  border-color: var(--color-primary);
+}
+
+.chip.is-on:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
