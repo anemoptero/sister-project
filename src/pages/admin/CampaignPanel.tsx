@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { callApi, isApiError, validationField } from '../../api/client';
 import type { ApiActionMap } from '../../types/api';
 import type { AdminCustomer, Campaign, Coupon, CouponGrantType, Grant } from '../../types/models';
@@ -6,6 +7,7 @@ import { isoToLocalInput, localInputToIso } from '../../utils/datetime';
 import { formatDateTime } from '../../utils/format';
 import { parseIntStrict } from '../../utils/number';
 import { MemberPicker } from './MemberPicker';
+import { isMockUid, makeMockCustomers } from './mockCustomers';
 
 type CreatePayload = ApiActionMap['adminCreateCampaign']['payload'];
 
@@ -19,8 +21,17 @@ const GRANT_TYPE_LABELS: Record<CouponGrantType, string> = {
 const MAX_BATCH = 400;
 
 export function CampaignPanel({ coupons }: { coupons: Coupon[] }) {
+  const [searchParams] = useSearchParams();
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
-  const [customers, setCustomers] = useState<AdminCustomer[]>([]);
+  const [realCustomers, setRealCustomers] = useState<AdminCustomer[]>([]);
+
+  /**
+   * 版面預覽：網址加上 `?mock=30` 就會混入 30 位假會員，用來檢查人多時
+   * 選單的捲動與搜尋。假資料只存在於瀏覽器，送出前會被過濾掉。
+   */
+  const mockCount = Number(searchParams.get('mock') ?? 0);
+  const mocks = mockCount > 0 ? makeMockCustomers(mockCount) : [];
+  const customers = mocks.length ? [...realCustomers, ...mocks] : realCustomers;
   const [editing, setEditing] = useState<Campaign | 'new' | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -46,7 +57,7 @@ export function CampaignPanel({ coupons }: { coupons: Coupon[] }) {
     }
 
     if (customerResult.status === 'fulfilled') {
-      setCustomers(customerResult.value.customers);
+      setRealCustomers(customerResult.value.customers);
     }
   }, []);
 
@@ -64,6 +75,7 @@ export function CampaignPanel({ coupons }: { coupons: Coupon[] }) {
         initial={editing === 'new' ? undefined : editing}
         coupons={coupons}
         customers={customers}
+        mockCount={mocks.length}
         onCancel={() => setEditing(null)}
         onSaved={(text) => {
           setEditing(null);
@@ -191,12 +203,14 @@ function CampaignForm({
   initial,
   coupons,
   customers,
+  mockCount,
   onCancel,
   onSaved
 }: {
   initial?: Campaign;
   coupons: Coupon[];
   customers: AdminCustomer[];
+  mockCount: number;
   onCancel: () => void;
   onSaved: (message: string) => void;
 }) {
@@ -299,9 +313,19 @@ function CampaignForm({
         campaignId = created.campaignId;
       }
 
-      if (pending.length > 0) {
+      /**
+       * 過濾掉版面預覽用的假會員。
+       *
+       * 後端不會驗證 uid 是否真的存在，假 uid 送過去會產生指向不存在使用者的
+       * 孤兒 grant，而且會佔用活動的發放額度 —— 那正是我們刻意避免寫進
+       * Firestore 的東西，不能在這裡漏出去。
+       */
+      const realPending = pending.filter((uid) => !isMockUid(uid));
+      const mockSkipped = pending.length - realPending.length;
+
+      if (realPending.length > 0) {
         try {
-          const result = await callApi('adminGrantCoupon', { campaignId, uids: pending });
+          const result = await callApi('adminGrantCoupon', { campaignId, uids: realPending });
 
           /**
            * 兩種略過原因的解法完全不同，必須分開講：
@@ -320,6 +344,8 @@ function CampaignForm({
           if (perUser.length) {
             notes.push(`${perUser.length} 位因已持有足夠張數而略過`);
           }
+
+          if (mockSkipped > 0) notes.push(`${mockSkipped} 位預覽用假資料未發放`);
 
           onSaved(
             `已儲存「${name.trim()}」並發放 ${result.granted} 張` +
@@ -344,7 +370,11 @@ function CampaignForm({
           return;
         }
       } else {
-        onSaved(`已儲存「${name.trim()}」。`);
+        onSaved(
+          mockSkipped > 0
+            ? `已儲存「${name.trim()}」。選取的 ${mockSkipped} 位是預覽用假資料，未實際發放。`
+            : `已儲存「${name.trim()}」。`
+        );
       }
     } catch (err) {
       if (isApiError(err)) {
@@ -546,6 +576,14 @@ function CampaignForm({
               ? '加入的會員會在儲存時收到券。已發放的無法從這裡移除，要收回請用下方的領取紀錄。'
               : '選擇的會員會在活動建立後立即收到券。也可以先不選，之後再編輯加入。'}
           </p>
+
+          {mockCount > 0 && (
+            <p className="notice">
+              🔍 <strong>版面預覽模式</strong>：清單中混入了 {mockCount} 位假會員，
+              用來檢視人數多時的操作手感。這些資料<strong>只存在於瀏覽器</strong>，
+              選取後也不會實際發放。移除網址結尾的 <code>?mock=…</code> 即可關閉。
+            </p>
+          )}
 
           {/* 額度用完時先講清楚，否則按了發放才被略過，而略過訊息容易被當成雜訊 */}
           {exhausted && (
