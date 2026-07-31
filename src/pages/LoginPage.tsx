@@ -83,7 +83,10 @@ export default function LoginPage() {
         return;
       }
 
-      void navigate(from, { replace: true });
+      // 管理員沒有指定目的地時直接進後台 —— 他們登入幾乎都是為了管理，
+      // 而不是瀏覽療程。有 from 時仍以 from 為準（例如被守衛導過來的）
+      const landing = from === '/' && data.user.role === 'admin' ? '/admin' : from;
+      void navigate(landing, { replace: true });
     } catch (err) {
       startedRef.current = false; // 允許按重試
       setPhase('error');

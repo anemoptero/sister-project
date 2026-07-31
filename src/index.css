@@ -126,6 +126,45 @@ button:disabled {
   color: inherit;
 }
 
+/* 後台用深色列，讓管理員一眼看出自己在哪一側，
+   避免在後台誤以為看到的是顧客畫面 */
+.app-header--admin {
+  background: #1f2937;
+  border-bottom-color: #111827;
+}
+
+.app-header--admin .app-brand,
+.app-header--admin .app-nav a,
+.app-header--admin .app-username {
+  color: #e5e7eb;
+}
+
+.app-header--admin .app-nav a.active {
+  color: #fff;
+  border-bottom-color: #fff;
+}
+
+.app-header--admin button {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+/* 前台 / 後台互切的入口，刻意做得比主導覽低調 */
+.app-frontlink {
+  font-size: 0.9rem;
+  text-decoration: none;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.app-header--admin .app-frontlink {
+  color: #d1d5db;
+  border-color: #4b5563;
+}
+
 /* 手機上導覽項目可能放不下，允許橫向捲動而非撐破版面。
    -webkit-overflow-scrolling 讓 iOS 的慣性捲動正常。 */
 .app-nav {
