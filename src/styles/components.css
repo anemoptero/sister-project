@@ -1188,3 +1188,56 @@ span.chip.is-on {
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+/* 確認頁的品項：名稱、券選單、折抵各自成列 */
+.confirm-item {
+  padding: var(--space-3) 0;
+  border-bottom: var(--border-width) solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.confirm-item:last-child {
+  border-bottom: none;
+}
+
+.confirm-item select {
+  width: 100%;
+  font: inherit;
+  font-size: 16px;
+  padding: 8px var(--space-3);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+
+.confirm-item select:disabled {
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+}
+
+/* 需要被注意但不是錯誤的區塊，例如產品內容變更 */
+.notice-card {
+  border-color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+
+.notice-card h3 {
+  margin-top: 0;
+  color: var(--color-warning);
+}
+
+.notice-card .diff-table {
+  background: var(--color-surface);
+}
+
+/* 卡片標題列的「更改」按鈕貼齊右側 */
+.card .page-head {
+  margin-bottom: var(--space-3);
+}
+
+.card .page-head h3 {
+  margin: 0;
+}

@@ -68,6 +68,15 @@ export function StepTime({
         </p>
       </div>
 
+      {/* 從確認頁被退回來時說明原因，並強調其他選擇都還在 ——
+          否則顧客會以為整筆預約作廢了 */}
+      {conflictSlotStartAt && (
+        <p className="notice">
+          你剛才選的時段已經被其他客人預約了，請改選一個時間。
+          <strong>你選的服務與優惠券都還保留著</strong>，選好時間就能直接送出。
+        </p>
+      )}
+
       {error && <p className="error">{error}</p>}
 
       {days === null && !error && (
@@ -118,7 +127,7 @@ export function StepTime({
           上一步
         </button>
         <button type="button" onClick={onNext} disabled={!startAt}>
-          選擇優惠券
+          下一步
         </button>
       </div>
     </div>

@@ -5,18 +5,16 @@ import type { ApiDataOf } from '../../types/api';
 import type { Product } from '../../types/models';
 import { formatPrice } from '../../utils/format';
 import { StepConfirm } from './StepConfirm';
-import { StepCoupons } from './StepCoupons';
 import { StepServices } from './StepServices';
 import { StepTime } from './StepTime';
 import { totalDurationOf, type BookingItem } from './types';
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3;
 
 const STEP_LABELS: Record<Step, string> = {
   1: '選服務',
   2: '選時間',
-  3: '優惠券',
-  4: '確認'
+  3: '確認'
 };
 
 /**
@@ -126,7 +124,7 @@ export default function BookingPage() {
       <h1>預約</h1>
 
       <ol className="steps">
-        {([1, 2, 3, 4] as Step[]).map((value) => (
+        {([1, 2, 3] as Step[]).map((value) => (
           <li
             key={value}
             className={`step${value === step ? ' is-active' : ''}${
@@ -164,26 +162,20 @@ export default function BookingPage() {
       )}
 
       {step === 3 && (
-        <StepCoupons
+        <StepConfirm
           items={items}
           startAt={startAt}
           cartCouponGrantId={cartCouponGrantId}
           onSetItemCoupon={setItemCoupon}
           onSetCartCoupon={setCartCouponGrantId}
-          onBack={() => setStep(2)}
-          onNext={() => setStep(4)}
-        />
-      )}
-
-      {step === 4 && (
-        <StepConfirm
-          items={items}
-          startAt={startAt}
-          cartCouponGrantId={cartCouponGrantId}
-          onBack={() => setStep(3)}
-          onBackToServices={() => setStep(1)}
-          onBackToTime={(conflict) => {
-            // 時段被搶走：回到選時間並重新查詢，同時標出衝突的那一格
+          onChangeServices={() => setStep(1)}
+          onChangeTime={(conflict) => {
+            /**
+             * 回到選時間，但**只清掉時間本身**。
+             *
+             * 服務組合與已選的券全部保留 —— 時段被別人搶走不是顧客的錯，
+             * 沒有理由讓他重挑一次服務與優惠券。
+             */
             setConflictSlot(conflict);
             setStartAt('');
             setTimeReloadKey((k) => k + 1);

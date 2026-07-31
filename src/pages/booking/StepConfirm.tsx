@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   callApi,
   isApiError,
@@ -9,110 +8,162 @@ import {
 } from '../../api/client';
 import { ProductDiff } from '../../components/ProductDiff';
 import { ERROR_CODES, type ApiDataOf } from '../../types/api';
-import type { Product } from '../../types/models';
+import type { MyCoupon, Product } from '../../types/models';
 import { formatDuration, formatPrice } from '../../utils/format';
-import { totalDurationOf, type BookingItem } from './types';
+import {
+  isCartCouponEligible,
+  isCouponEligibleForProduct,
+  matchesWeekday,
+  originalAmountOf,
+  totalDurationOf,
+  type BookingItem
+} from './types';
 
 interface Props {
   items: BookingItem[];
   startAt: string;
   cartCouponGrantId: string;
-  onBack: () => void;
-  onBackToTime: (conflictSlotStartAt: string) => void;
-  onBackToServices: () => void;
-  /** 產品在流程中被改過，以最新資料替換 */
+  onSetItemCoupon: (index: number, grantId: string) => void;
+  onSetCartCoupon: (grantId: string) => void;
+  onChangeTime: (conflictSlotStartAt: string) => void;
+  onChangeServices: () => void;
   onProductUpdated: (product: Product) => void;
   onDone: (order: ApiDataOf<'createOrder'>) => void;
 }
 
 type Preview = ApiDataOf<'previewOrder'>;
 
-/** 產品在流程途中被管理員改過 */
+/** 產品在流程途中被改過 */
 interface ChangedProduct {
   before: Product;
   after: Product;
 }
 
 /**
- * 步驟四：確認並送出。
+ * 試算的節流間隔。
  *
- * 試算（`previewOrder`）純唯讀，不佔用時間也不佔用券的額度。
- * **試算通過不代表下單一定成功** —— 中間可能被別人用掉最後一次券額度
- * 或搶走時段，所以 `createOrder` 會重新驗證一次。
+ * 每次改動優惠券都要向後端重新試算（金額只能由後端決定），而 Apps Script
+ * 一次往返約一到三秒。連續切換下拉選單時若每次都送，回應會亂序抵達，
+ * 畫面金額可能停在中間某個狀態。
+ */
+const PREVIEW_DEBOUNCE_MS = 350;
+
+/**
+ * 確認頁：選券、看金額、送出，全部在同一頁。
+ *
+ * 原本把選券獨立成一步，結果顧客在選券當下看不到折抵多少 ——
+ * 那正是他需要判斷的資訊。合併之後每次改動都會重新試算並更新金額。
+ *
+ * **所有失敗都在這一頁原地復原，不讓顧客重頭來過**：
+ *
+ * ```text
+ * 產品被改  顯示差異橫幅 → 自動套用新版本並重算 → 再按一次送出
+ * 時段被搶  顯示原因 → 就地跳回選時間，服務與券全部保留
+ * 券不適用  標示是哪一張 → 清掉那張重算，其餘保留
+ * 缺電話    引導補資料，回來後選擇都還在
+ * ```
  */
 export function StepConfirm({
   items,
   startAt,
   cartCouponGrantId,
-  onBack,
-  onBackToTime,
-  onBackToServices,
+  onSetItemCoupon,
+  onSetCartCoupon,
+  onChangeTime,
+  onChangeServices,
   onProductUpdated,
   onDone
 }: Props) {
-  const navigate = useNavigate();
-
+  const [coupons, setCoupons] = useState<MyCoupon[] | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [previewError, setPreviewError] = useState('');
+  const [calculating, setCalculating] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [changed, setChanged] = useState<ChangedProduct | null>(null);
+
+  /** 只接受最後一次試算的結果，避免亂序回應把金額停在舊值 */
+  const previewSeq = useRef(0);
 
   const buildItems = useCallback(
     () =>
       items.map((item) => ({
         productId: item.product.productId,
-        // createOrder 每項必填 —— 顧客必須是看著最新的價格下單，
-        // 否則會出現「畫面顯示 1800、實際記 2200」的爭議
+        // createOrder 每項必填 —— 顧客必須是看著最新的價格下單
         expectedProductVersion: item.product.version,
         ...(item.couponGrantId ? { couponGrantId: item.couponGrantId } : {})
       })),
     [items]
   );
 
-  const runPreview = useCallback(async () => {
-    setPreviewError('');
-    setPreview(null);
-    try {
-      const data = await callApi('previewOrder', {
-        startAt,
-        items: buildItems(),
-        ...(cartCouponGrantId ? { cartCouponGrantId } : {})
-      });
-      setPreview(data);
-    } catch (err) {
-      setPreviewError(isApiError(err) ? err.message : '試算失敗，請稍後再試。');
-    }
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await callApi('listMyCoupons', {});
+        if (!cancelled) setCoupons(data.coupons);
+      } catch {
+        // 券載入失敗不該擋住預約，顧客仍可不使用優惠券完成
+        if (!cancelled) setCoupons([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 品項、時間或整單券變動就重新試算。金額只能由後端決定
+  useEffect(() => {
+    const seq = ++previewSeq.current;
+    setCalculating(true);
+
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const data = await callApi('previewOrder', {
+            startAt,
+            items: buildItems(),
+            ...(cartCouponGrantId ? { cartCouponGrantId } : {})
+          });
+          if (seq !== previewSeq.current) return;
+          setPreview(data);
+          setError('');
+        } catch (err) {
+          if (seq !== previewSeq.current) return;
+          // 試算就會抓出不適用的券，不必等到送出才失敗
+          setError(isApiError(err) ? err.message : '試算失敗，請稍後再試。');
+          setPreview(null);
+        } finally {
+          if (seq === previewSeq.current) setCalculating(false);
+        }
+      })();
+    }, PREVIEW_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
   }, [startAt, buildItems, cartCouponGrantId]);
 
-  useEffect(() => {
-    void runPreview();
-  }, [runPreview]);
-
   function handleApiFailure(err: ApiError) {
-    // 產品在顧客瀏覽期間被改過：後端只回當前產品，差異要由前端比對
     const productChange = productChangedDetails(err);
     if (productChange) {
       const before = items.find(
         (item) => item.product.productId === productChange.product.productId
       )?.product;
 
-      if (before) {
-        setChanged({ before, after: productChange.product });
-        return;
-      }
+      // 找不到對應品項時仍要顯示差異，用後端回傳的當前值當作兩邊，
+      // 至少讓顧客看到最新內容而不是一句看不懂的錯誤
+      setChanged({ before: before ?? productChange.product, after: productChange.product });
+      onProductUpdated(productChange.product);
+      return;
     }
 
     const slot = slotUnavailableDetails(err);
     if (slot) {
-      // 訊息本身已含時間（「16:00 這個時段已額滿」），直接顯示即可
-      setError(err.message);
-      onBackToTime(slot.conflictSlotStartAt);
+      // 訊息本身已含時間（「16:00 這個時段已額滿」）
+      onChangeTime(slot.conflictSlotStartAt);
       return;
     }
 
     if (err.is(ERROR_CODES.PROFILE_INCOMPLETE)) {
-      void navigate(`/my/profile?from=${encodeURIComponent('/booking')}`);
+      setError('需要先留下聯絡電話才能完成預約，請到「個人資料」填寫後再回來。');
       return;
     }
 
@@ -137,116 +188,190 @@ export function StepConfirm({
     }
   }
 
-  // --- 產品被改過 ---
-  if (changed) {
-    return (
-      <div className="stack">
-        <h2>療程內容已更新</h2>
-        <p>你在選擇的這段時間裡，「{changed.after.name}」被調整了。請確認以下變動：</p>
-
-        <ProductDiff before={changed.before} after={changed.after} />
-
-        <div className="actions">
-          <button
-            type="button"
-            onClick={() => {
-              // 以新版本取代後重新試算，下一次送出才會帶對的 version
-              onProductUpdated(changed.after);
-              setChanged(null);
-            }}
-          >
-            我知道了，以新內容繼續
-          </button>
-          <button type="button" className="secondary" onClick={onBackToServices}>
-            重新選擇服務
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const duration = totalDurationOf(items);
+  const originalAmount = originalAmountOf(items);
+  const usable = (coupons ?? []).filter((c) => c.usable && matchesWeekday(c, startAt));
+  const usedItemCoupons = items.map((item) => item.couponGrantId).filter(Boolean);
+  const hasItemCoupon = usedItemCoupons.length > 0;
+  const hasCartCoupon = Boolean(cartCouponGrantId);
+  const cartCandidates = usable.filter((c) => isCartCouponEligible(c, originalAmount));
 
   return (
     <div className="stack">
-      <div>
-        <h2>確認預約</h2>
-        <p className="hint">確認以下內容無誤後送出。</p>
-      </div>
+      {/* 產品被改過：橫幅而非取代整頁，下方的選擇與金額都還在 */}
+      {changed && (
+        <section className="card notice-card">
+          <h3>療程內容已更新</h3>
+          <p>
+            你在選擇的這段時間裡，「{changed.after.name}」被調整了。
+            以下金額已改為最新內容，確認後再送出一次即可 —— <strong>不需要重新預約</strong>。
+          </p>
+
+          <ProductDiff before={changed.before} after={changed.after} />
+
+          <div className="actions">
+            <button type="button" onClick={() => setChanged(null)}>
+              我已確認變更
+            </button>
+            <button type="button" className="secondary" onClick={onChangeServices}>
+              重新選擇服務
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="card">
-        <h3>預約時間</h3>
+        <div className="page-head">
+          <h3>預約時間</h3>
+          <button type="button" className="ghost" onClick={() => onChangeTime('')}>
+            更改時間
+          </button>
+        </div>
         <p className="confirm-time">{formatDateTimeLong(startAt)}</p>
-        <p className="hint">共 {formatDuration(duration)}</p>
+        <p className="hint">共 {formatDuration(totalDurationOf(items))}</p>
       </section>
 
       <section className="card">
-        <h3>服務內容</h3>
+        <div className="page-head">
+          <h3>服務與優惠券</h3>
+          <button type="button" className="ghost" onClick={onChangeServices}>
+            增減服務
+          </button>
+        </div>
 
-        {previewError && <p className="error">{previewError}</p>}
-        {!preview && !previewError && <div className="skeleton" />}
+        <p className="hint">
+          單項折抵與整筆折抵<strong>不能同時使用</strong>，選了一種另一種會停用。
+        </p>
 
-        {preview && (
-          <>
-            <ul className="confirm-list">
-              {preview.items.map((line, index) => (
-                <li key={`${line.productId}-${index}`}>
-                  <div className="confirm-line">
-                    <span>{line.productName}</span>
-                    <span>{formatPrice(line.productPrice)}</span>
-                  </div>
-                  {line.discountAmount > 0 && (
-                    <div className="confirm-line confirm-discount">
-                      <span>{line.couponName || '優惠折抵'}</span>
-                      <span>-{formatPrice(line.discountAmount)}</span>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
+        <ul className="confirm-list">
+          {items.map((item, index) => {
+            const line = preview?.items[index];
+            const candidates = usable.filter(
+              (c) =>
+                isCouponEligibleForProduct(c, item.product) &&
+                // 同一張券在同筆訂單只能出現一次
+                (c.grantId === item.couponGrantId || !usedItemCoupons.includes(c.grantId))
+            );
 
-            <div className="confirm-total">
-              <div className="confirm-line">
-                <span>小計</span>
-                <span>{formatPrice(preview.pricing.originalAmount)}</span>
-              </div>
-
-              {preview.pricing.cartDiscountAmount > 0 && (
-                <div className="confirm-line confirm-discount">
-                  <span>{preview.cartCouponName || '整筆折抵'}</span>
-                  <span>-{formatPrice(preview.pricing.cartDiscountAmount)}</span>
+            return (
+              <li key={`${item.product.productId}-${index}`} className="confirm-item">
+                <div className="confirm-line">
+                  <span className="select-title">{item.product.name}</span>
+                  <span>{formatPrice(item.product.price)}</span>
                 </div>
-              )}
 
-              <div className="confirm-line confirm-final">
-                <span>應付金額</span>
-                <span>{formatPrice(preview.pricing.finalAmount)}</span>
-              </div>
+                <select
+                  value={item.couponGrantId}
+                  disabled={hasCartCoupon || candidates.length === 0}
+                  onChange={(e) => onSetItemCoupon(index, e.target.value)}
+                  aria-label={`${item.product.name}的優惠券`}
+                >
+                  <option value="">
+                    {candidates.length === 0 ? '沒有適用的券' : '不使用優惠券'}
+                  </option>
+                  {candidates.map((coupon) => (
+                    <option key={coupon.grantId} value={coupon.grantId}>
+                      {describeCoupon(coupon)}
+                    </option>
+                  ))}
+                </select>
+
+                {line && line.discountAmount > 0 && (
+                  <div className="confirm-line confirm-discount">
+                    <span>{line.couponName || '優惠折抵'}</span>
+                    <span>-{formatPrice(line.discountAmount)}</span>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="field">
+          <label htmlFor="cart-coupon">整筆訂單折抵</label>
+          <select
+            id="cart-coupon"
+            value={cartCouponGrantId}
+            disabled={hasItemCoupon || cartCandidates.length === 0}
+            onChange={(e) => onSetCartCoupon(e.target.value)}
+          >
+            <option value="">
+              {cartCandidates.length === 0 ? '沒有適用的整筆折抵券' : '不使用優惠券'}
+            </option>
+            {cartCandidates.map((coupon) => (
+              <option key={coupon.grantId} value={coupon.grantId}>
+                {describeCoupon(coupon)}
+              </option>
+            ))}
+          </select>
+          {hasItemCoupon && <p className="hint">已使用單項折抵，整筆折抵無法同時使用。</p>}
+        </div>
+      </section>
+
+      <section className="card">
+        <h3>金額</h3>
+
+        <div className="confirm-total">
+          <div className="confirm-line">
+            <span>服務小計</span>
+            <span>{formatPrice(originalAmount)}</span>
+          </div>
+
+          {preview && preview.pricing.itemDiscountAmount > 0 && (
+            <div className="confirm-line confirm-discount">
+              <span>單項折抵</span>
+              <span>-{formatPrice(preview.pricing.itemDiscountAmount)}</span>
             </div>
+          )}
 
-            {preview.pricing.finalAmount === 0 && (
-              <p className="hint">這筆訂單已全額折抵，現場不需付款。</p>
-            )}
-          </>
+          {preview && preview.pricing.cartDiscountAmount > 0 && (
+            <div className="confirm-line confirm-discount">
+              <span>{preview.cartCouponName || '整筆折抵'}</span>
+              <span>-{formatPrice(preview.pricing.cartDiscountAmount)}</span>
+            </div>
+          )}
+
+          <div className="confirm-line confirm-final">
+            <span>應付金額</span>
+            <span>
+              {calculating || !preview ? (
+                <span className="hint">計算中…</span>
+              ) : (
+                formatPrice(preview.pricing.finalAmount)
+              )}
+            </span>
+          </div>
+        </div>
+
+        {preview?.pricing.finalAmount === 0 && !calculating && (
+          <p className="hint">這筆訂單已全額折抵，現場不需付款。</p>
         )}
       </section>
 
       {error && <p className="error">{error}</p>}
 
       <div className="summary-bar">
-        <button type="button" className="secondary" onClick={onBack} disabled={submitting}>
-          上一步
-        </button>
+        <div>
+          <span className="hint">應付金額</span>
+          <strong>
+            {calculating || !preview ? '計算中…' : formatPrice(preview.pricing.finalAmount)}
+          </strong>
+        </div>
         <button
           type="button"
           onClick={() => void handleSubmit()}
-          disabled={submitting || !preview}
+          disabled={submitting || calculating || !preview}
         >
           {submitting ? '送出中…' : '確認預約'}
         </button>
       </div>
     </div>
   );
+}
+
+function describeCoupon(coupon: MyCoupon): string {
+  const value =
+    coupon.type === 'experience' ? '全額折抵' : `折 ${formatPrice(coupon.discountAmount)}`;
+  return `${coupon.name}（${value}）`;
 }
 
 function formatDateTimeLong(iso: string): string {
