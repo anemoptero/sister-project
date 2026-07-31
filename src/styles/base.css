@@ -1,0 +1,195 @@
+/**
+ * 基礎樣式與版面。
+ *
+ * RWD 斷點（docs/AGENT_GUIDE.md §9.2），一律以 viewport 寬度判斷：
+ *   < 768px        手機
+ *   768 ~ 1024px   平板
+ *   > 1024px       桌面
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* 錨點跳轉時不要被固定頁首蓋住 */
+  scroll-padding-top: calc(var(--header-height) + var(--space-4));
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.7;
+  letter-spacing: var(--tracking-normal);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/**
+ * 背景圖層。
+ *
+ * 用 ::before 的固定定位圖層而非 body 的 background —— 這樣可以在圖片上
+ * 疊一層與主題同色的半透明遮罩，確保任何背景圖下文字都讀得清楚。
+ * 直接用 body background 的話，深色照片會讓內文完全看不見。
+ */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: var(--page-bg-image);
+  background-size: var(--page-bg-size);
+  background-position: var(--page-bg-position);
+  background-repeat: no-repeat;
+  background-attachment: scroll;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--page-bg-overlay);
+  /* 沒有背景圖時遮罩沒有意義，讓它不擋住底色 */
+  opacity: 1;
+}
+
+/* 沒設定背景圖時直接關掉兩個圖層，省去無謂的合成 */
+:root:not([data-has-bg='true']) body::before,
+:root:not([data-has-bg='true']) body::after {
+  display: none;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.35;
+  margin: 0 0 var(--space-3);
+}
+
+h1 {
+  font-size: 1.7rem;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 1.25rem;
+  font-weight: 650;
+}
+
+h3 {
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+p {
+  margin: 0 0 var(--space-3);
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+code {
+  background: var(--color-surface-alt);
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
+}
+
+/**
+ * 鍵盤焦點一律可見。
+ *
+ * 用 :focus-visible 而非 :focus，滑鼠點擊時不會出現焦點框，
+ * 但鍵盤操作與讀屏軟體使用者仍看得到自己在哪 —— 兩者不可偏廢。
+ */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* 尊重系統的減少動態偏好設定 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- 版面容器 --- */
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.page {
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) var(--space-7);
+}
+
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.page-head h1 {
+  margin: 0;
+}
+
+.hint {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.stack > * + * {
+  margin-top: var(--space-4);
+}
+
+@media (min-width: 768px) {
+  body {
+    font-size: 16.5px;
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+
+  .page {
+    padding: var(--space-6) var(--space-5) var(--space-7);
+  }
+}
+
+@media (min-width: 1024px) {
+  .page {
+    padding: var(--space-7) var(--space-6);
+  }
+}

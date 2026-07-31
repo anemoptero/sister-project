@@ -3,6 +3,8 @@ import { AuthProvider } from './auth/AuthProvider';
 import { AdminLayout } from './components/AdminLayout';
 import { Layout } from './components/Layout';
 import { RequireAdmin, RequireAuth, RequireProfile } from './components/RouteGuards';
+import { AppearanceProvider } from './theme/AppearanceProvider';
+import AdminAppearancePage from './pages/admin/AdminAppearancePage';
 import AdminProductsPage from './pages/admin/AdminProductsPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
@@ -21,8 +23,9 @@ import ProfilePage from './pages/ProfilePage';
  */
 export default function App() {
   return (
-    <AuthProvider>
-      <HashRouter>
+    <AppearanceProvider>
+      <AuthProvider>
+        <HashRouter>
         <Routes>
           {/* --- 後台 --- */}
           <Route element={<RequireAdmin />}>
@@ -53,6 +56,7 @@ export default function App() {
                 path="/admin/stats"
                 element={<PlaceholderPage title="銷售統計" stage="F 段" />}
               />
+              <Route path="/admin/appearance" element={<AdminAppearancePage />} />
             </Route>
           </Route>
 
@@ -96,8 +100,9 @@ export default function App() {
 
             <Route path="*" element={<NotFoundPage />} />
           </Route>
-        </Routes>
-      </HashRouter>
-    </AuthProvider>
+          </Routes>
+        </HashRouter>
+      </AuthProvider>
+    </AppearanceProvider>
   );
 }

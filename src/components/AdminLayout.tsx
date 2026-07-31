@@ -29,6 +29,7 @@ export function AdminLayout() {
           <NavLink to="/admin/orders">訂單</NavLink>
           <NavLink to="/admin/customers">會員</NavLink>
           <NavLink to="/admin/stats">統計</NavLink>
+          <NavLink to="/admin/appearance">外觀</NavLink>
         </nav>
 
         <div className="app-account">

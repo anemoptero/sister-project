@@ -1,0 +1,179 @@
+/**
+ * 設計 token。
+ *
+ * 所有顏色、圓角、陰影、間距都走 CSS 變數，元件不直接寫死色碼 ——
+ * 這是「換主題」與「換背景」能夠只改一處的前提。日後若把外觀設定
+ * 存進後端，也只需要覆蓋這幾個變數，不必改任何元件。
+ *
+ * 主題以 <html data-theme="..."> 切換，見 src/theme/themes.ts。
+ */
+
+:root {
+  /* --- 字體 ---
+     不引用外部字型：LINE 內建瀏覽器在行動網路下載字型會有明顯的
+     文字閃動，而且多一個外部相依。改以系統字型加上字重與字距建立層次。 */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', 'Noto Sans TC', 'PingFang TC',
+    'Microsoft JhengHei', sans-serif;
+
+  /* 中文在較鬆的字距下易讀性明顯較好 */
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0.01em;
+  --tracking-wide: 0.06em;
+
+  /* --- 間距 --- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* --- 圓角與陰影 --- */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 3px rgb(0 0 0 / 0.06);
+  --shadow-md: 0 4px 6px -2px rgb(0 0 0 / 0.05), 0 12px 20px -4px rgb(0 0 0 / 0.08);
+  --shadow-lg: 0 12px 24px -8px rgb(0 0 0 / 0.12), 0 24px 48px -12px rgb(0 0 0 / 0.14);
+
+  --border-width: 1px;
+
+  /* --- 版面 --- */
+  --page-max: 1040px;
+  --header-height: 60px;
+
+  /* --- 動態 ---
+     單一過場時間，避免各元件各自定義導致節奏不一致 */
+  --transition: 160ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* --- 頁面背景 ---
+     由 ThemeProvider 在執行期覆蓋。預設為無圖，只有底色。 */
+  --page-bg-image: none;
+  --page-bg-size: cover;
+  --page-bg-position: center;
+  /**
+   * 背景圖上方的遮罩，確保文字在任何圖片上都讀得清楚。
+   *
+   * 以 --color-bg 混出來，換主題時自動跟著變 —— 深色主題不該壓白色遮罩，
+   * 否則整張背景圖會泛白。ThemeProvider 只需調整這裡的百分比。
+   */
+  --page-bg-opacity: 82%;
+  --page-bg-overlay: color-mix(in srgb, var(--color-bg) var(--page-bg-opacity), transparent);
+}
+
+/* ==========================================================================
+   主題
+   每個主題只需要覆蓋語意色，其餘 token 共用。
+   ========================================================================== */
+
+/* 暖砂 —— 預設。米白基底配深棕與陶土色，適合美容／療程場域 */
+:root,
+:root[data-theme='sand'] {
+  --color-bg: #f7f4ef;
+  --color-surface: #fffdfa;
+  --color-surface-alt: #f2ede5;
+  --color-text: #2e2a25;
+  --color-text-muted: #7d746a;
+  --color-border: #e3dbd0;
+  --color-border-strong: #cfc4b5;
+
+  --color-primary: #8c5c3e;
+  --color-primary-hover: #74492f;
+  --color-primary-text: #fffdfa;
+  --color-accent: #b98a5e;
+
+  --color-danger: #a63232;
+  --color-danger-bg: #fbeceb;
+  --color-success: #3f6b46;
+  --color-success-bg: #ecf3ed;
+  --color-warning: #8a5a12;
+  --color-warning-bg: #fdf3e0;
+
+  --color-admin-bg: #2e2a25;
+  --color-admin-text: #efe9e0;
+}
+
+/* 淨白 —— 極簡黑白，適合偏冷調的品牌形象 */
+:root[data-theme='mono'] {
+  --color-bg: #f6f6f7;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f0f0f2;
+  --color-text: #17181c;
+  --color-text-muted: #6b6d76;
+  --color-border: #e3e3e7;
+  --color-border-strong: #c9c9d0;
+
+  --color-primary: #17181c;
+  --color-primary-hover: #000000;
+  --color-primary-text: #ffffff;
+  --color-accent: #55575f;
+
+  --color-danger: #b3261e;
+  --color-danger-bg: #fceceb;
+  --color-success: #2f6b3f;
+  --color-success-bg: #ecf4ee;
+  --color-warning: #855108;
+  --color-warning-bg: #fdf2e1;
+
+  --color-admin-bg: #17181c;
+  --color-admin-text: #e8e8ea;
+}
+
+/* 霧綠 —— 柔和草木色，適合強調自然、放鬆的療程 */
+:root[data-theme='sage'] {
+  --color-bg: #f2f5f1;
+  --color-surface: #fbfdfa;
+  --color-surface-alt: #e8ede5;
+  --color-text: #23291f;
+  --color-text-muted: #6d7568;
+  --color-border: #dbe2d6;
+  --color-border-strong: #c1ccba;
+
+  --color-primary: #4f6b47;
+  --color-primary-hover: #3d5537;
+  --color-primary-text: #fbfdfa;
+  --color-accent: #7d9a70;
+
+  --color-danger: #a13a30;
+  --color-danger-bg: #f9ece9;
+  --color-success: #3d6b45;
+  --color-success-bg: #eaf3ec;
+  --color-warning: #7f5a15;
+  --color-warning-bg: #fbf2e2;
+
+  --color-admin-bg: #23291f;
+  --color-admin-text: #e6eae3;
+}
+
+/* 夜色 —— 深色主題 */
+:root[data-theme='night'] {
+  --color-bg: #16171a;
+  --color-surface: #1e2024;
+  --color-surface-alt: #26282e;
+  --color-text: #ecedf0;
+  --color-text-muted: #9a9da6;
+  --color-border: #32353c;
+  --color-border-strong: #454951;
+
+  --color-primary: #c8a27a;
+  --color-primary-hover: #d7b48f;
+  --color-primary-text: #16171a;
+  --color-accent: #a1846a;
+
+  --color-danger: #e88b83;
+  --color-danger-bg: #2e1f1e;
+  --color-success: #8fc79c;
+  --color-success-bg: #1d2a20;
+  --color-warning: #e0b571;
+  --color-warning-bg: #2c2418;
+
+  --color-admin-bg: #0f1012;
+  --color-admin-text: #ecedf0;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 6px 16px -4px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 16px 32px -8px rgb(0 0 0 / 0.6);
+}

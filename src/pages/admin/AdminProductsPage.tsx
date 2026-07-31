@@ -252,7 +252,11 @@ export default function AdminProductsPage() {
                   </td>
                   <td>{formatPrice(product.price)}</td>
                   <td>{formatDuration(product.durationMinutes)}</td>
-                  <td>{product.enabled ? '啟用' : '停用'}</td>
+                  <td>
+                    <span className={`tag ${product.enabled ? 'tag--on' : 'tag--off'}`}>
+                      {product.enabled ? '啟用' : '停用'}
+                    </span>
+                  </td>
                   <td>
                     <div className="cell-actions">
                       <button

@@ -1,0 +1,655 @@
+/** 元件樣式。一律使用 tokens.css 的變數，不直接寫死色碼。 */
+
+/* ==========================================================================
+   頁首
+   ========================================================================== */
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  /* 前一行是給不支援 color-mix 的瀏覽器的降級值（iOS 16.2 以前）。
+     不寫的話整條宣告失效，頁首會變成透明，捲動時文字疊在一起。
+     後續所有 color-mix 都比照辦理。 */
+  background: var(--color-surface);
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  border-bottom: var(--border-width) solid var(--color-border);
+  /* 半透明加模糊，捲動時內容從底下透出來但不干擾閱讀。
+     不支援 backdrop-filter 的瀏覽器會退回上面的半透明底色，仍可用。 */
+  backdrop-filter: blur(12px);
+}
+
+.app-brand {
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: var(--tracking-tight);
+  text-decoration: none;
+  color: var(--color-text);
+}
+
+.app-nav {
+  display: flex;
+  gap: var(--space-4);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.app-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.app-nav a {
+  position: relative;
+  white-space: nowrap;
+  text-decoration: none;
+  font-size: 0.95rem;
+  color: var(--color-text-muted);
+  padding: var(--space-2) 0;
+  transition: color var(--transition);
+}
+
+.app-nav a:hover {
+  color: var(--color-text);
+}
+
+.app-nav a.active {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+/* 底線用 ::after 而非 border-bottom：border 會改變元素高度，
+   造成切換時整條導覽列跳動 */
+.app-nav a.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+}
+
+.app-account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.app-username {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  max-width: 10ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-frontlink {
+  font-size: 0.85rem;
+  text-decoration: none;
+  color: var(--color-text-muted);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-3);
+  white-space: nowrap;
+  transition: border-color var(--transition), color var(--transition);
+}
+
+.app-frontlink:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+/* 後台：深色頁首，一眼分得出自己在哪一側 */
+.app-header--admin {
+  background: var(--color-admin-bg);
+  background: color-mix(in srgb, var(--color-admin-bg) 92%, transparent);
+  border-bottom-color: transparent;
+}
+
+.app-header--admin .app-brand,
+.app-header--admin .app-nav a.active {
+  color: var(--color-admin-text);
+}
+
+.app-header--admin .app-nav a,
+.app-header--admin .app-username,
+.app-header--admin .app-frontlink {
+  color: var(--color-admin-text);
+  color: color-mix(in srgb, var(--color-admin-text) 70%, transparent);
+}
+
+.app-header--admin .app-nav a:hover {
+  color: var(--color-admin-text);
+}
+
+.app-header--admin .app-nav a.active::after {
+  background: var(--color-admin-text);
+}
+
+.app-header--admin .app-frontlink {
+  border-color: var(--color-border-strong);
+  border-color: color-mix(in srgb, var(--color-admin-text) 30%, transparent);
+}
+
+.app-header--admin .btn,
+.app-header--admin button {
+  background: var(--color-admin-text);
+  background: color-mix(in srgb, var(--color-admin-text) 90%, transparent);
+  color: var(--color-admin-bg);
+}
+
+/* ==========================================================================
+   按鈕
+   ========================================================================== */
+
+button,
+.btn {
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-normal);
+  padding: 10px var(--space-5);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+  cursor: pointer;
+  transition: background var(--transition), transform var(--transition),
+    box-shadow var(--transition);
+}
+
+button:hover:not(:disabled),
+.btn:hover {
+  background: var(--color-primary-hover);
+}
+
+/* 按下時微微內縮，給出實體回饋 */
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+button.secondary {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+button.secondary:hover:not(:disabled) {
+  background: var(--color-surface-alt);
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+  border-color: transparent;
+  padding: var(--space-2) var(--space-3);
+}
+
+button.ghost:hover:not(:disabled) {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+button.small {
+  font-size: 0.85rem;
+  padding: 6px var(--space-3);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+/* ==========================================================================
+   卡片與表單
+   ========================================================================== */
+
+.card {
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5) var(--space-4);
+  box-shadow: var(--shadow-sm);
+}
+
+.card h2 {
+  margin-top: 0;
+}
+
+.field {
+  margin-bottom: var(--space-5);
+}
+
+.field label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: var(--space-2);
+}
+
+/* 字級不可小於 16px：iOS Safari 會在聚焦小於 16px 的輸入框時
+   自動放大整個頁面，使用者得手動縮回去 */
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 16px;
+  padding: 10px var(--space-3);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-border);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
+  outline: none;
+}
+
+.field input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.field .hint {
+  margin: var(--space-2) 0 0;
+}
+
+.field-row {
+  display: grid;
+  gap: 0 var(--space-4);
+  grid-template-columns: 1fr;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.checkbox input {
+  width: auto;
+  accent-color: var(--color-primary);
+}
+
+.image-preview {
+  max-height: 180px;
+  border-radius: var(--radius-md);
+  border: var(--border-width) solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ==========================================================================
+   訊息
+   ========================================================================== */
+
+.notice,
+.error,
+.success {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: var(--border-width) solid transparent;
+  font-size: 0.95rem;
+}
+
+.notice {
+  background: var(--color-warning-bg);
+  border-color: var(--color-border);
+  border-color: color-mix(in srgb, var(--color-warning) 25%, transparent);
+  color: var(--color-warning);
+}
+
+.error {
+  background: var(--color-danger-bg);
+  border-color: var(--color-border);
+  border-color: color-mix(in srgb, var(--color-danger) 25%, transparent);
+  color: var(--color-danger);
+}
+
+.success {
+  background: var(--color-success-bg);
+  border-color: var(--color-border);
+  border-color: color-mix(in srgb, var(--color-success) 25%, transparent);
+  color: var(--color-success);
+}
+
+/* ==========================================================================
+   表格
+   ========================================================================== */
+
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--border-width) solid var(--color-border);
+  vertical-align: top;
+}
+
+.data-table tbody tr:last-child th,
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table thead th {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  color: var(--color-text-muted);
+  background: var(--color-surface-alt);
+  white-space: nowrap;
+}
+
+.data-table tbody tr {
+  transition: background var(--transition);
+}
+
+.data-table tbody tr:hover {
+  background: var(--color-surface-alt);
+}
+
+.row-disabled td {
+  color: var(--color-text-muted);
+}
+
+.cell-sub {
+  margin: var(--space-1) 0 0;
+  max-width: 36ch;
+}
+
+.cell-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* 狀態標籤 */
+.tag {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-normal);
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.tag--on {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.tag--off {
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+}
+
+/* 差異比對 */
+.diff-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--space-4) 0;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: var(--border-width) solid var(--color-border);
+}
+
+.diff-table th,
+.diff-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--border-width) solid var(--color-border);
+  text-align: left;
+}
+
+.diff-table tbody tr:last-child th,
+.diff-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.diff-table thead th {
+  background: var(--color-surface-alt);
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.diff-before {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+
+.diff-after {
+  color: var(--color-warning);
+  font-weight: 650;
+}
+
+/* ==========================================================================
+   空狀態與載入
+   ========================================================================== */
+
+.empty-state {
+  text-align: center;
+  padding: var(--space-7) var(--space-4);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  background: color-mix(in srgb, var(--color-surface) 60%, transparent);
+}
+
+.empty-state h2 {
+  color: var(--color-text);
+}
+
+/* 骨架載入：比「載入中…」三個字更不容易讓人以為畫面壞了 */
+.skeleton {
+  height: 14px;
+  border-radius: var(--radius-full);
+  /* 降級：不支援 color-mix 時整條 gradient 會失效，
+     骨架就變成看不見的空白。先給一個純色底。 */
+  background: var(--color-surface-alt);
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-alt) 25%,
+    color-mix(in srgb, var(--color-surface-alt) 60%, var(--color-surface)) 37%,
+    var(--color-surface-alt) 63%
+  );
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+.skeleton + .skeleton {
+  margin-top: var(--space-3);
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+@media (min-width: 768px) {
+  .app-header {
+    padding: var(--space-3) var(--space-5);
+  }
+
+  .app-account {
+    margin-left: auto;
+  }
+
+  .app-username {
+    max-width: 18ch;
+  }
+
+  .field-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .card {
+    padding: var(--space-6);
+  }
+}
+
+@media (min-width: 1024px) {
+  .app-header {
+    padding: var(--space-3) var(--space-6);
+  }
+}
+
+/* ==========================================================================
+   外觀設定
+   ========================================================================== */
+
+.theme-grid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: 1fr;
+}
+
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  text-align: left;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 2px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 400;
+}
+
+.theme-card:hover:not(:disabled) {
+  background: var(--color-surface-alt);
+  border-color: var(--color-border-strong);
+}
+
+.theme-card.is-selected {
+  border-color: var(--color-primary);
+}
+
+.theme-name {
+  font-weight: 650;
+}
+
+/* 色票直接顯示該主題的實際配色，不必套用就看得出差別 */
+.theme-swatch {
+  display: flex;
+  gap: 4px;
+}
+
+.theme-swatch i {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgb(0 0 0 / 0.08);
+}
+
+.theme-swatch--sand i:nth-child(1) { background: #f7f4ef; }
+.theme-swatch--sand i:nth-child(2) { background: #8c5c3e; }
+.theme-swatch--sand i:nth-child(3) { background: #b98a5e; }
+
+.theme-swatch--mono i:nth-child(1) { background: #f6f6f7; }
+.theme-swatch--mono i:nth-child(2) { background: #17181c; }
+.theme-swatch--mono i:nth-child(3) { background: #55575f; }
+
+.theme-swatch--sage i:nth-child(1) { background: #f2f5f1; }
+.theme-swatch--sage i:nth-child(2) { background: #4f6b47; }
+.theme-swatch--sage i:nth-child(3) { background: #7d9a70; }
+
+.theme-swatch--night i:nth-child(1) { background: #16171a; }
+.theme-swatch--night i:nth-child(2) { background: #c8a27a; }
+.theme-swatch--night i:nth-child(3) { background: #1e2024; }
+
+.gradient-grid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.gradient-card {
+  height: 72px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--color-border);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  display: flex;
+  align-items: flex-end;
+  padding: var(--space-2);
+}
+
+.gradient-card.is-selected {
+  border-color: var(--color-primary);
+}
+
+.gradient-card span {
+  background: rgb(255 255 255 / 0.75);
+  border-radius: var(--radius-sm);
+  padding: 1px 8px;
+  color: #2e2a25;
+}
+
+.field input[type='range'] {
+  padding: 0;
+  border: none;
+  accent-color: var(--color-primary);
+}
+
+@media (min-width: 768px) {
+  .theme-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .gradient-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .theme-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
