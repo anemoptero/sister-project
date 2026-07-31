@@ -12,18 +12,17 @@ interface Props {
   onRemove: (uid: string) => void;
 }
 
-/** 一次最多顯示幾筆候選。太多會把版面淹掉，也失去「搜尋」的意義 */
-const MAX_SUGGESTIONS = 8;
-
 /**
- * 會員選擇器：可搜尋的下拉候選 + 已選清單。
+ * 會員選擇器。
  *
- * 已發放的會員以鎖定狀態顯示，**不提供移除按鈕** —— 券一旦發出去就存在於
- * 對方的帳戶裡，從這個清單上「取消勾選」並不會把它收回來。真正的收回動作
- * 在下方的領取紀錄，那裡才會實際標記 `revokedAt`。
+ * **預設就把所有會員列出來**，搜尋只是縮小範圍的輔助 ——
+ * 管理員不可能記得每位客人的暱稱或電話，「先搜尋才看得到人」等於要求
+ * 他先知道答案才能找答案。清單可捲動，人多時再用搜尋過濾。
  *
- * 若這裡允許移除，管理員會以為券已經收回，但顧客結帳時仍然能用 ——
- * 畫面與實際狀態不一致是最糟的一種錯誤。
+ * 已發放的會員以鎖定狀態顯示，**不提供移除按鈕**：券已經在對方帳戶裡，
+ * 從清單上取消勾選並不會收回它。真正的收回在下方的領取紀錄，那裡才會
+ * 實際標記 `revokedAt`。若這裡允許移除，管理員會以為券收回了，
+ * 但顧客結帳時仍然能用。
  */
 export function MemberPicker({ customers, pending, granted, max, onAdd, onRemove }: Props) {
   const [query, setQuery] = useState('');
@@ -31,63 +30,70 @@ export function MemberPicker({ customers, pending, granted, max, onAdd, onRemove
   const byUid = (uid: string) => customers.find((c) => c.uid === uid);
   const label = (uid: string) => byUid(uid)?.displayName || '（未命名）';
 
-  const taken = new Set([...pending, ...granted]);
+  const pendingSet = new Set(pending);
+  const grantedSet = new Set(granted);
 
-  const suggestions = customers
-    .filter((c) => !taken.has(c.uid))
-    .filter((c) => {
-      if (!query.trim()) return true;
-      const q = query.trim();
-      return c.displayName.includes(q) || c.phone.includes(q);
-    })
-    .slice(0, MAX_SUGGESTIONS);
+  const q = query.trim();
+  const matched = customers.filter(
+    (c) => !q || c.displayName.includes(q) || c.phone.includes(q)
+  );
 
-  const reachedMax = pending.length + granted.length >= max;
+  const selectedCount = pending.length + granted.length;
+  const reachedMax = selectedCount >= max;
 
   return (
     <div className="member-picker">
       <div className="field">
-        <label htmlFor="mp-search">加入會員</label>
+        <label htmlFor="mp-search">
+          會員清單（共 {customers.length} 位，已選 {selectedCount} / {max}）
+        </label>
         <input
           id="mp-search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="輸入名稱或電話搜尋"
-          disabled={reachedMax}
+          placeholder="人數多時可輸入名稱或電話過濾"
           autoComplete="off"
         />
-        <p className="hint">
-          已選 {pending.length + granted.length} / {max} 位。
-          {reachedMax && '已達單次上限，請先儲存後再分批加入。'}
-        </p>
       </div>
 
-      {!reachedMax && (
-        <div className="picker-list">
-          {customers.length === 0 && <p className="hint">尚無會員資料。</p>}
+      <div className="picker-list">
+        {customers.length === 0 && (
+          <p className="hint">
+            尚無會員資料。會員要先用 LINE 登入過一次，系統才會建立帳號。
+          </p>
+        )}
 
-          {customers.length > 0 && suggestions.length === 0 && (
-            <p className="hint">
-              {query.trim() ? '沒有符合的會員。' : '所有會員都已加入。'}
-            </p>
-          )}
+        {customers.length > 0 && matched.length === 0 && (
+          <p className="hint">沒有符合「{q}」的會員。</p>
+        )}
 
-          {suggestions.map((customer) => (
+        {matched.map((customer) => {
+          const isGranted = grantedSet.has(customer.uid);
+          const isPending = pendingSet.has(customer.uid);
+          // 已發放的一律不可再點；未選的在額度滿時也不可再加
+          const disabled = isGranted || (!isPending && reachedMax);
+
+          return (
             <button
               type="button"
               key={customer.uid}
-              className="picker-option"
-              onClick={() => {
-                onAdd(customer.uid);
-                // 加入後清空搜尋，方便連續加入多位
-                setQuery('');
-              }}
+              className={`picker-option${isPending ? ' is-selected' : ''}`}
+              disabled={disabled}
+              onClick={() => (isPending ? onRemove(customer.uid) : onAdd(customer.uid))}
             >
+              <span className="picker-check" aria-hidden="true">
+                {isGranted ? '✓' : isPending ? '✓' : ''}
+              </span>
               <span className="picker-name">{customer.displayName || '（未命名）'}</span>
               {customer.phone && <span className="hint">{customer.phone}</span>}
+              {isGranted && <span className="chip-lock">已發放</span>}
             </button>
-          ))}
-        </div>
+          );
+        })}
+      </div>
+
+      {reachedMax && (
+        <p className="hint">已達單次上限 {max} 位，請先儲存後再分批加入。</p>
       )}
 
       {(pending.length > 0 || granted.length > 0) && (

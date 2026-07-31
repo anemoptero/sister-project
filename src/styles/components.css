@@ -824,3 +824,39 @@ span.chip.is-on {
 .chip-remove:hover:not(:disabled) {
   background: rgb(255 255 255 / 0.25);
 }
+
+/* 清單一次顯示約 6 位，其餘捲動 —— 全部展開會把表單其他部分推到看不見 */
+.member-picker .picker-list {
+  max-height: 22rem;
+}
+
+.picker-option {
+  align-items: center;
+}
+
+.picker-option:disabled {
+  opacity: 1; /* 已發放的仍要看得清楚，只是不可點 */
+  cursor: default;
+  color: var(--color-text-muted);
+}
+
+.picker-option.is-selected {
+  background: var(--color-surface-alt);
+}
+
+/* 固定寬度的勾選欄，避免有勾與沒勾的項目文字左右跳動 */
+.picker-check {
+  display: inline-block;
+  width: 1.25rem;
+  flex: none;
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.picker-option:disabled .picker-check {
+  color: var(--color-text-muted);
+}
+
+.picker-option .picker-name {
+  flex: 1;
+}

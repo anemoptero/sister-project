@@ -424,8 +424,25 @@ export interface ApiActionMap {
   adminGrantCoupon: {
     /** uids 最多 400 筆 —— Firestore 單次 commit 上限 500，留餘裕給活動計數 */
     payload: { campaignId: string; uids: string[]; note?: string };
-    /** 已達 maxGrantsPerUser 的使用者會被**跳過而非整批失敗** */
-    data: { granted: number; skipped: string[]; grantIds: string[] };
+    data: {
+      granted: number;
+      /**
+       * 被跳過的使用者**與原因**。跳過而非讓整批失敗。
+       *
+       * 兩種原因的處理方式完全不同，因此必須分開顯示：
+       *   CAMPAIGN_EXHAUSTED  活動的 maxGrants 已用完 → 調高上限即可
+       *   MAX_PER_USER        該會員已持有達 coupon.maxGrantsPerUser 張
+       *
+       * ⚠️ 曾經把這裡誤寫成 `string[]` 並一律顯示成「已達持有上限」，
+       * 導致管理員找不到真正的原因（其實是活動額度用完）。
+       *
+       * 刻意收斂成這兩個字面值而不加 `| string`：後端日後若新增原因，
+       * 比對處會出現型別錯誤，逼我們回來補上對應的說明文字 ——
+       * 總比靜默顯示成一個沒人看得懂的代碼好。
+       */
+      skipped: { uid: string; reason: 'CAMPAIGN_EXHAUSTED' | 'MAX_PER_USER' }[];
+      grantIds: string[];
+    };
   };
   adminListGrants: {
     /**

@@ -302,11 +302,30 @@ function CampaignForm({
       if (pending.length > 0) {
         try {
           const result = await callApi('adminGrantCoupon', { campaignId, uids: pending });
-          const skippedNote =
-            result.skipped.length > 0
-              ? `，${result.skipped.length} 位因已達持有上限而略過`
-              : '';
-          onSaved(`已儲存「${name.trim()}」並發放 ${result.granted} 張${skippedNote}。`);
+
+          /**
+           * 兩種略過原因的解法完全不同，必須分開講：
+           *   活動額度用完 → 調高「最多發出幾張」就能繼續
+           *   個人持有上限 → 要改的是券的設定，或先收回對方手上的
+           *
+           * 混為一談的話管理員會往錯的方向找原因。
+           */
+          const exhausted = result.skipped.filter((s) => s.reason === 'CAMPAIGN_EXHAUSTED');
+          const perUser = result.skipped.filter((s) => s.reason === 'MAX_PER_USER');
+
+          const notes: string[] = [];
+          if (exhausted.length) {
+            notes.push(`${exhausted.length} 位因活動發放額度已用完而略過`);
+          }
+          if (perUser.length) {
+            notes.push(`${perUser.length} 位因已持有足夠張數而略過`);
+          }
+
+          onSaved(
+            `已儲存「${name.trim()}」並發放 ${result.granted} 張` +
+              (notes.length ? `，${notes.join('、')}` : '') +
+              '。'
+          );
         } catch (grantErr) {
           /**
            * 活動已經建立/更新成功，只有發放失敗。
@@ -351,6 +370,15 @@ function CampaignForm({
 
   const showMembers = grantType === 'admin';
   const grantedCount = initial?.grantedCount ?? 0;
+
+  /**
+   * 活動額度是否已用完。
+   *
+   * 以**表單上當前填的值**判斷而非 `initial.maxGrants`，這樣管理員把上限
+   * 調高之後提示會立刻消失，不必先儲存才知道有沒有解決。
+   */
+  const limitInForm = parseIntStrict(maxGrants) ?? 0;
+  const exhausted = limitInForm > 0 && grantedCount >= limitInForm;
 
   return (
     <form className="stack" onSubmit={(e) => void handleSubmit(e)}>
@@ -471,8 +499,10 @@ function CampaignForm({
               aria-invalid={errorField === 'maxGrants'}
             />
             <p className="hint">
-              發放端閘門。0 表示不限。
-              {grantedCount > 0 && `不可小於已發放的 ${grantedCount} 張。`}
+              0 表示不限。這是<strong>累計發出過幾張</strong>的上限 ——
+              <strong>收回不會退還額度</strong>，因為它記錄的是「發出過幾張」而不是
+              「目前有效幾張」。
+              {grantedCount > 0 && `目前已發出 ${grantedCount} 張，不可設定得比它小。`}
             </p>
           </div>
 
@@ -516,6 +546,17 @@ function CampaignForm({
               ? '加入的會員會在儲存時收到券。已發放的無法從這裡移除，要收回請用下方的領取紀錄。'
               : '選擇的會員會在活動建立後立即收到券。也可以先不選，之後再編輯加入。'}
           </p>
+
+          {/* 額度用完時先講清楚，否則按了發放才被略過，而略過訊息容易被當成雜訊 */}
+          {exhausted && (
+            <p className="notice">
+              這個活動已經發出 {grantedCount} 張，達到上限 {limitInForm} 張，
+              <strong>再加入會員也不會發出</strong>。
+              <br />
+              收回不會退還額度 —— 上限記錄的是「累計發出過幾張」。
+              要繼續發放，請把上方的「最多發出幾張」調高，或設為 0（不限）。
+            </p>
+          )}
 
           <MemberPicker
             customers={customers}
