@@ -5,6 +5,7 @@ import { Layout } from './components/Layout';
 import { RequireAdmin, RequireAuth, RequireProfile } from './components/RouteGuards';
 import { AppearanceProvider } from './theme/AppearanceProvider';
 import AdminAppearancePage from './pages/admin/AdminAppearancePage';
+import AdminBusinessHoursPage from './pages/admin/AdminBusinessHoursPage';
 import AdminProductsPage from './pages/admin/AdminProductsPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
@@ -32,10 +33,7 @@ export default function App() {
             <Route element={<AdminLayout />}>
               <Route path="/admin" element={<PlaceholderPage title="後台首頁" stage="D 段" />} />
               <Route path="/admin/products" element={<AdminProductsPage />} />
-              <Route
-                path="/admin/business-hours"
-                element={<PlaceholderPage title="營業時間" stage="D 段" />}
-              />
+              <Route path="/admin/business-hours" element={<AdminBusinessHoursPage />} />
               <Route
                 path="/admin/coupons"
                 element={<PlaceholderPage title="優惠券與發放活動" stage="D 段" />}

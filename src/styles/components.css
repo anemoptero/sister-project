@@ -653,3 +653,14 @@ button.small {
     grid-template-columns: repeat(4, 1fr);
   }
 }
+
+/* 表格內的時間輸入不需要撐滿整欄，否則欄位會被拉得很寬 */
+.time-input {
+  width: auto;
+  min-width: 7.5rem;
+}
+
+/* 表格內的核取方塊置中，與標題對齊 */
+.data-table .checkbox {
+  justify-content: flex-start;
+}
