@@ -6,6 +6,11 @@ import { formatDateTime } from '../../utils/format';
 /** 後端上限 400（Firestore 單次 commit 500 個寫入，留一個給活動計數與餘裕） */
 const MAX_BATCH = 400;
 
+/** 指出是哪一份資料載入失敗，而不是籠統的「載入失敗」 */
+function describe(reason: unknown, what: string): string {
+  return `${what}載入失敗：${isApiError(reason) ? reason.message : '請稍後再試'}`;
+}
+
 /**
  * 發券與發放紀錄。
  *
@@ -26,32 +31,69 @@ export function GrantPanel() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
+  /**
+   * 載入活動與會員。
+   *
+   * 用 `allSettled` 而非 `all`：兩者互不相依，其中一支失敗時另一支的結果
+   * 仍然有用。`all` 會讓任一失敗就整批丟棄，畫面變成完全空白，
+   * 而使用者看到的是「什麼都沒有」而不是「有一部分載入失敗」。
+   */
   const load = useCallback(async () => {
     setError('');
-    try {
-      // 三份資料互不相依，平行取回。Apps Script 每次往返都要一兩秒，
-      // 串行的話這頁要等五六秒才看得到東西
-      const [campaignData, customerData, grantData] = await Promise.all([
-        callApi('adminListCampaigns', {}),
-        callApi('adminListCustomers', { limit: 100 }),
-        callApi('adminListGrants', { limit: 50 })
-      ]);
 
-      const adminCampaigns = campaignData.campaigns.filter(
+    const [campaignResult, customerResult] = await Promise.allSettled([
+      callApi('adminListCampaigns', {}),
+      callApi('adminListCustomers', { limit: 100 })
+    ]);
+
+    const problems: string[] = [];
+
+    if (campaignResult.status === 'fulfilled') {
+      const adminCampaigns = campaignResult.value.campaigns.filter(
         (c) => c.grantType === 'admin' && c.enabled
       );
       setCampaigns(adminCampaigns);
       setCampaignId((prev) => prev || adminCampaigns[0]?.campaignId || '');
-      setCustomers(customerData.customers);
-      setGrants(grantData.grants);
+    } else {
+      problems.push(describe(campaignResult.reason, '發放活動'));
+    }
+
+    if (customerResult.status === 'fulfilled') {
+      setCustomers(customerResult.value.customers);
+    } else {
+      problems.push(describe(customerResult.reason, '會員清單'));
+    }
+
+    if (problems.length) setError(problems.join('　'));
+  }, []);
+
+  /**
+   * 載入某個活動的發放紀錄。
+   *
+   * 後端要求必須指定 `campaignId` 或 `uid` —— 它不支援「列出全部」，
+   * 那需要掃描整個 collection。因此紀錄的載入必須等活動選定之後。
+   */
+  const loadGrants = useCallback(async (id: string) => {
+    if (!id) {
+      setGrants([]);
+      return;
+    }
+    try {
+      const data = await callApi('adminListGrants', { campaignId: id, limit: 50 });
+      setGrants(data.grants);
     } catch (err) {
-      setError(isApiError(err) ? err.message : '載入資料失敗。');
+      setGrants([]);
+      setError(isApiError(err) ? err.message : '載入發放紀錄失敗。');
     }
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadGrants(campaignId);
+  }, [campaignId, loadGrants]);
 
   function toggle(uid: string) {
     setSelected((prev) => (prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]));
@@ -83,7 +125,8 @@ export function GrantPanel() {
           : `已發放 ${data.granted} 張。`
       );
       setSelected([]);
-      await load();
+      // 活動的 grantedCount 與發放紀錄都變了，兩邊都要重載
+      await Promise.all([load(), loadGrants(campaignId)]);
     } catch (err) {
       setError(isApiError(err) ? err.message : '發放失敗，請稍後再試。');
     } finally {
@@ -97,7 +140,7 @@ export function GrantPanel() {
     try {
       await callApi('adminRevokeGrant', { grantId });
       setMessage('已收回該張券。');
-      await load();
+      await loadGrants(campaignId);
     } catch (err) {
       setError(isApiError(err) ? err.message : '收回失敗。');
     }
@@ -112,16 +155,24 @@ export function GrantPanel() {
   const customerName = (uid: string) =>
     customers.find((c) => c.uid === uid)?.displayName ?? uid;
 
+  const selectedCampaign = campaigns.find((c) => c.campaignId === campaignId);
+
   return (
     <div className="stack">
       <section className="card">
         <h2>發放優惠券</h2>
 
+        {error && <p className="error">{error}</p>}
+
         {campaigns.length === 0 ? (
           <div className="empty-state">
             <h2>沒有可用的發放活動</h2>
             <p>
-              請先在「發放活動」建立一個<strong>發放方式為「後台主動發放」</strong>且已啟用的活動。
+              這裡只列出<strong>發放方式為「後台主動發放」且已啟用</strong>的活動。
+            </p>
+            <p className="hint">
+              「顧客憑連結領取」與「符合條件自動發放」的活動不會出現在這裡 ——
+              前者由顧客自己領、後者由系統發，從後台插隊會讓兩者的配額失去意義。
             </p>
           </div>
         ) : (
@@ -182,8 +233,8 @@ export function GrantPanel() {
               />
             </div>
 
+            {/* 錯誤已在區塊頂端統一顯示，這裡只放成功訊息，避免同一則訊息出現兩次 */}
             {message && <p className="success">{message}</p>}
-            {error && <p className="error">{error}</p>}
 
             <div className="actions">
               <button type="button" onClick={() => void handleGrant()} disabled={submitting}>
@@ -196,9 +247,14 @@ export function GrantPanel() {
 
       <section className="card" style={{ marginTop: 'var(--space-5)' }}>
         <h2>發放紀錄</h2>
+        <p className="hint">
+          {selectedCampaign
+            ? `顯示「${selectedCampaign.name}」的發放紀錄。切換上方的活動可查看其他活動。`
+            : '選擇上方的發放活動後才會顯示紀錄。'}
+        </p>
 
         {grants === null && <div className="skeleton" />}
-        {grants?.length === 0 && <p className="hint">尚無發放紀錄。</p>}
+        {grants?.length === 0 && <p className="hint">這個活動尚未發出任何券。</p>}
 
         {grants && grants.length > 0 && (
           <div className="table-scroll">

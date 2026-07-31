@@ -428,7 +428,16 @@ export interface ApiActionMap {
     data: { granted: number; skipped: string[]; grantIds: string[] };
   };
   adminListGrants: {
-    payload: PagedPayload & { campaignId?: string; uid?: string };
+    /**
+     * **`campaignId` 與 `uid` 至少要有一項**，兩者皆缺會回 `VALIDATION_ERROR`。
+     *
+     * 後端刻意不支援「列出全部發放紀錄」—— 那需要掃描整個 collection，
+     * 隨著發放量成長會越來越慢，而實務上的查詢一定是針對某個活動或某位會員。
+     *
+     * 用聯集型別表達這個約束，漏帶時 tsc 就會擋下來，不必等到執行期才發現。
+     */
+    payload: PagedPayload &
+      ({ campaignId: string; uid?: string } | { campaignId?: string; uid: string });
     data: PagedData & { grants: Grant[] };
   };
   adminRevokeGrant: {
