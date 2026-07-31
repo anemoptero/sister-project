@@ -1,0 +1,53 @@
+name: Keep API warm
+
+# 定時打一次 ping，避免 Apps Script 執行個體閒置後冷掉。
+#
+# 實測（ping 這支不碰 Firestore 的 API）：
+#   閒置後第一次   3.4 ～ 14.2 秒
+#   連續呼叫       1.1 ～ 1.7 秒
+#
+# ⚠️ GitHub 的排程是「盡力而為」，尖峰時可能延遲 10～30 分鐘，
+# 保溫效果會斷斷續續。要穩定準時請改用 cron-job.org 或 UptimeRobot，
+# 兩者免費方案都夠用，屆時把這個 workflow 刪掉即可。
+#
+# ⚠️ GitHub 會停用「repo 連續 60 天沒有活動」的排程 workflow。
+# 若某天發現保溫失效，先確認這裡是不是被停了。
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+# 只讀取，不需要任何寫入權限
+permissions:
+  contents: read
+
+# 前一次還沒跑完就跳過，不要堆積
+concurrency:
+  group: keep-warm
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Apps Script
+        env:
+          API_URL: ${{ secrets.VITE_APPS_SCRIPT_URL }}
+        run: |
+          if [ -z "$API_URL" ]; then
+            echo "尚未設定 VITE_APPS_SCRIPT_URL secret，略過"
+            exit 0
+          fi
+
+          # -L 跟隨 302（Apps Script 會轉址到 googleusercontent）
+          # --max-time 60：冷啟動最慢實測 14 秒，留足餘裕
+          # 失敗不讓 workflow 紅字 —— 保溫失敗不是需要通知的事件，
+          # 每次失敗都寄信只會讓人養成忽略通知的習慣
+          ELAPSED=$(curl -s -L -o /dev/null --max-time 60 \
+            -w '%{time_total}' \
+            -X POST \
+            -H 'Content-Type: text/plain;charset=utf-8' \
+            -d '{"action":"ping","payload":{}}' \
+            "$API_URL") || { echo "ping 失敗"; exit 0; }
+
+          echo "回應時間 ${ELAPSED}s"
