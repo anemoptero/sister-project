@@ -4,6 +4,7 @@ import { callApi, isApiError } from '../api/client';
 import { useAuth } from '../auth/useAuth';
 import {
   LiffError,
+  forceLineRelogin,
   getLineIdToken,
   getLineProfile,
   initLiff,
@@ -15,6 +16,33 @@ import {
 import { buildReturnUrl } from '../liff/returnUrl';
 
 type Phase = 'working' | 'redirecting' | 'error';
+
+/**
+ * 已經為了取得新 token 重新登入過一次的標記。
+ *
+ * 存在 sessionStorage 而非記憶體：重新登入是**整頁跳轉**，記憶體變數會歸零，
+ * 那樣一來「重試一次」的上限就永遠不會生效，變成無限跳轉迴圈。
+ */
+const RELOGIN_FLAG = 'sister.liffRelogin';
+
+function hasTriedRelogin(): boolean {
+  try {
+    return window.sessionStorage.getItem(RELOGIN_FLAG) === '1';
+  } catch {
+    // 讀不到就當成試過了。寧可讓使用者看到錯誤訊息，
+    // 也不要冒無限跳轉的風險
+    return true;
+  }
+}
+
+function markRelogin(tried: boolean): void {
+  try {
+    if (tried) window.sessionStorage.setItem(RELOGIN_FLAG, '1');
+    else window.sessionStorage.removeItem(RELOGIN_FLAG);
+  } catch {
+    // 無痕模式等情境下寫入會失敗，退回「不自動重試」的行為
+  }
+}
 
 /**
  * LINE 登入頁。
@@ -75,6 +103,8 @@ export default function LoginPage() {
         profile
       });
 
+      // 成功了就清掉重試標記，下次過期時才能再自動修復一次
+      markRelogin(false);
       signIn(data.sessionToken, data.user, data.profileComplete);
 
       // 沒有電話就先補資料 —— 否則會在下單最後一步才被擋，體驗更差
@@ -88,6 +118,27 @@ export default function LoginPage() {
       const landing = from === '/' && data.user.role === 'admin' ? '/admin' : from;
       void navigate(landing, { replace: true });
     } catch (err) {
+      /**
+       * idToken 過期是可以自動修復的：清掉 LINE 登入狀態重新取得即可。
+       *
+       * 後端只回「LINE idToken 驗證失敗」（`UNAUTHORIZED`），不區分原因 ——
+       * 詳細的 error_description 可能含 token 片段，只寫進 Cloud Logging。
+       * 因此這裡把後端的 UNAUTHORIZED 也一併當成可能是過期來處理。
+       *
+       * 只自動修復一次。若重新登入後仍失敗，那就不是過期問題（多半是
+       * LINE_CHANNEL_ID 設錯），繼續跳轉只會變成無限迴圈。
+       */
+      const maybeStaleToken =
+        (err instanceof LiffError && err.code === 'ID_TOKEN_EXPIRED') ||
+        (isApiError(err) && err.isUnauthorized);
+
+      if (maybeStaleToken && !hasTriedRelogin()) {
+        markRelogin(true);
+        setPhase('redirecting');
+        forceLineRelogin(buildReturnUrl(from, sourceChannel, window.location));
+        return;
+      }
+
       startedRef.current = false; // 允許按重試
       setPhase('error');
       setErrorMessage(describeLoginError(err));
@@ -125,14 +176,38 @@ export default function LoginPage() {
     return (
       <div className="page">
         <h1>登入失敗</h1>
-        <p>{errorMessage}</p>
-        <p>
+        <p className="error">{errorMessage}</p>
+
+        <div className="actions">
           <button type="button" onClick={() => void runLogin()}>
             重試
           </button>
-        </p>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              // 清掉標記再強制重新登入，讓使用者能手動再試一次完整流程
+              markRelogin(false);
+              forceLineRelogin(buildReturnUrl(from, sourceChannel, window.location));
+            }}
+          >
+            清除 LINE 登入狀態後重試
+          </button>
+        </div>
+
+        {/* 自動修復過一次仍失敗，代表不是 token 過期，給出實際的排查方向 */}
+        {hasTriedRelogin() && (
+          <div className="notice" style={{ marginTop: 'var(--space-5)' }}>
+            <p>
+              <strong>已重新取得 LINE 身分但仍然失敗</strong>，這通常不是登入逾時，而是設定問題。
+            </p>
+            <p>請確認 Apps Script 指令碼屬性的 <code>LINE_CHANNEL_ID</code> 等於 LIFF ID 的前半段
+              （<code>-</code> 之前那串數字）。詳細原因寫在 Apps Script 的執行記錄裡。</p>
+          </div>
+        )}
+
         {!isInLineClient() && (
-          <p className="hint">若持續失敗，請改從 LINE App 開啟此頁面。</p>
+          <p className="hint">若持續失敗，也可以改從 LINE App 開啟此頁面試試。</p>
         )}
       </div>
     );

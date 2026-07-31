@@ -39,7 +39,30 @@ export type LiffErrorCode =
   /** liff.init 失敗，通常是 LIFF ID 錯誤或 Endpoint URL 不符 */
   | 'INIT_FAILED'
   /** 已登入 LINE 但拿不到 idToken，多半是 LIFF App 沒開 openid scope */
-  | 'NO_ID_TOKEN';
+  | 'NO_ID_TOKEN'
+  /** idToken 已過期，需要重新向 LINE 取得。可自動修復 */
+  | 'ID_TOKEN_EXPIRED';
+
+/**
+ * idToken 過期的判斷閾值。
+ *
+ * 留 60 秒緩衝：token 在送達後端的路上剛好過期的話，
+ * 使用者會收到一個看起來莫名其妙的驗證失敗。
+ */
+const ID_TOKEN_EXPIRY_SKEW_SECONDS = 60;
+
+/**
+ * idToken 是否已過期（或即將過期）。
+ *
+ * @param exp JWT 的 exp，單位是**秒**不是毫秒
+ * @param nowSeconds 現在時間（秒）
+ */
+export function isIdTokenExpired(exp: number | undefined, nowSeconds: number): boolean {
+  // 沒有 exp 就無從判斷，一律當成過期 —— fail closed。
+  // 當成有效的話會送出一個必定被拒絕的 token，錯誤更難懂。
+  if (typeof exp !== 'number' || !Number.isFinite(exp)) return true;
+  return nowSeconds >= exp - ID_TOKEN_EXPIRY_SKEW_SECONDS;
+}
 
 export function isLiffConfigured(): boolean {
   return Boolean(LIFF_ID);
@@ -105,7 +128,41 @@ export function getLineIdToken(): string {
       '無法取得 LINE 身分資訊，請確認 LIFF App 已開啟 openid 權限'
     );
   }
+
+  /**
+   * ⚠️ `liff.getIDToken()` 回傳的是**登入當下取得的那一份**，不會自動更新。
+   *
+   * LIFF 的登入狀態（`isLoggedIn()`）維持得比 idToken 的有效期久得多，
+   * 所以會出現這種情況：使用者看起來還登入著，拿到的卻是一份過期的 token，
+   * 後端驗證必然失敗，而錯誤訊息只會是「LINE idToken 驗證失敗」，
+   * 完全看不出是過期造成的。
+   *
+   * 因此送出前先自行檢查，過期就走重新登入取得新的。
+   */
+  const decoded = liff.getDecodedIDToken();
+  if (isIdTokenExpired(decoded?.exp, Math.floor(Date.now() / 1000))) {
+    throw new LiffError('ID_TOKEN_EXPIRED', 'LINE 登入資訊已過期，正在重新登入…');
+  }
+
   return token;
+}
+
+/**
+ * 清掉 LINE 的登入狀態再重新登入，用於取得全新的 idToken。
+ *
+ * 只呼叫 `liff.login()` 不夠 —— 已登入狀態下它可能直接返回而不重新取得 token。
+ * 必須先 `logout()` 才能確保拿到新的。
+ *
+ * **這會離開目前頁面**，呼叫之後的程式不會執行到。
+ */
+export function forceLineRelogin(redirectUri: string): void {
+  try {
+    liff.logout();
+  } catch {
+    // 清除失敗仍然嘗試登入，最壞的情況是又拿到同一份過期 token，
+    // 由呼叫端的重試上限擋住無限迴圈
+  }
+  liff.login({ redirectUri });
 }
 
 /**
