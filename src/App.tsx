@@ -8,8 +8,10 @@ import AdminAppearancePage from './pages/admin/AdminAppearancePage';
 import AdminBusinessHoursPage from './pages/admin/AdminBusinessHoursPage';
 import AdminCouponsPage from './pages/admin/AdminCouponsPage';
 import AdminProductsPage from './pages/admin/AdminProductsPage';
+import BookingPage from './pages/booking/BookingPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
+import ProductsPage from './pages/ProductsPage';
 import NotFoundPage from './pages/NotFoundPage';
 import PlaceholderPage from './pages/PlaceholderPage';
 import ProfilePage from './pages/ProfilePage';
@@ -61,10 +63,7 @@ export default function App() {
             {/* 公開 */}
             <Route path="/" element={<HomePage />} />
             <Route path="/login" element={<LoginPage />} />
-            <Route
-              path="/products"
-              element={<PlaceholderPage title="療程列表" stage="E 段" />}
-            />
+            <Route path="/products" element={<ProductsPage />} />
 
             {/* 需登入 */}
             <Route element={<RequireAuth />}>
@@ -85,10 +84,7 @@ export default function App() {
 
             {/* 需登入且已填電話 —— 少了電話，最後一步下單會被擋 */}
             <Route element={<RequireProfile />}>
-              <Route
-                path="/booking"
-                element={<PlaceholderPage title="預約流程" stage="E 段" />}
-              />
+              <Route path="/booking" element={<BookingPage />} />
             </Route>
 
             {/* 舊網址相容：曾以 /my 作為入口 */}
