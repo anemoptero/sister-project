@@ -47,6 +47,67 @@ code {
   font-size: 0.9em;
 }
 
+/* --- 表單與提示 --- */
+
+.field {
+  margin-bottom: 20px;
+}
+
+.field label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+/* 字級不可小於 16px：iOS Safari 會在聚焦小於 16px 的輸入框時
+   自動放大整個頁面，使用者得手動縮回去 */
+.field input {
+  width: 100%;
+  font-size: 16px;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.field input[aria-invalid='true'] {
+  border-color: #dc2626;
+}
+
+.field .hint {
+  margin: 6px 0 0;
+}
+
+button {
+  font-size: 1rem;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  background: #111827;
+  color: #fff;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #9ca3af;
+  cursor: default;
+}
+
+.notice {
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+}
+
+.error {
+  color: #b91c1c;
+}
+
+.success {
+  color: #15803d;
+}
+
 /* --- 全站外框 --- */
 
 .app-header {

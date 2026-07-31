@@ -3,8 +3,10 @@ import { AuthProvider } from './auth/AuthProvider';
 import { Layout } from './components/Layout';
 import { RequireAdmin, RequireAuth, RequireProfile } from './components/RouteGuards';
 import HomePage from './pages/HomePage';
+import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
 import PlaceholderPage from './pages/PlaceholderPage';
+import ProfilePage from './pages/ProfilePage';
 
 /**
  * 路由表，對應 docs/DEV_PLAN.md Phase 9 與 AGENT_GUIDE.md §9.1。
@@ -23,7 +25,7 @@ export default function App() {
           <Route element={<Layout />}>
             {/* 公開 */}
             <Route path="/" element={<HomePage />} />
-            <Route path="/login" element={<PlaceholderPage title="登入" stage="C 段" />} />
+            <Route path="/login" element={<LoginPage />} />
             <Route
               path="/products"
               element={<PlaceholderPage title="療程列表" stage="E 段" />}
@@ -31,10 +33,7 @@ export default function App() {
 
             {/* 需登入 */}
             <Route element={<RequireAuth />}>
-              <Route
-                path="/my/profile"
-                element={<PlaceholderPage title="個人資料" stage="C 段" />}
-              />
+              <Route path="/my/profile" element={<ProfilePage />} />
               <Route
                 path="/my/appointments"
                 element={<PlaceholderPage title="我的預約" stage="E 段" />}
