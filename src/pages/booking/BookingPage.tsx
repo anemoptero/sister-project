@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { callApi, isApiError } from '../../api/client';
+import type { ProductChange } from '../../components/ProductChangeNotice';
 import type { ApiDataOf } from '../../types/api';
 import type { Product } from '../../types/models';
 import { formatPrice } from '../../utils/format';
@@ -44,6 +45,15 @@ export default function BookingPage() {
   const [timeReloadKey, setTimeReloadKey] = useState(0);
   const [done, setDone] = useState<ApiDataOf<'createOrder'> | null>(null);
 
+  /**
+   * 流程進行中被管理員改過的療程。
+   *
+   * 放在最上層而不是確認頁元件內 —— 顧客可能因為時段被搶而被退回選時間，
+   * 那會讓確認頁卸載。若記錄跟著消失，回來後就看不到價格與時長變過，
+   * 而這正是最需要提醒的時候（時長改變還會連帶影響可預約時段）。
+   */
+  const [changes, setChanges] = useState<ProductChange[]>([]);
+
   const load = useCallback(async () => {
     setLoadError('');
     try {
@@ -79,6 +89,8 @@ export default function BookingPage() {
     setStartAt('');
     setCartCouponGrantId('');
     setConflictSlot('');
+    // 移除的療程不該再出現在變更提示裡
+    setChanges((prev) => prev.filter((c) => c.after.productId !== product.productId));
   }
 
   function setItemCoupon(index: number, grantId: string) {
@@ -87,8 +99,26 @@ export default function BookingPage() {
     );
   }
 
-  /** 產品在流程途中被改過，以最新資料替換但保留已選的券 */
-  function updateProduct(next: Product) {
+  /**
+   * 產品在流程途中被改過：記下差異、以最新資料替換，但保留已選的券。
+   *
+   * `before` 一律保留**顧客最初看到的內容**。管理員若連續改兩次，
+   * 顧客該看到的是「我當初看到的 → 現在的」，而不是兩次修改之間的差異。
+   */
+  function recordProductChange(next: Product) {
+    setChanges((prev) => {
+      const existing = prev.find((c) => c.after.productId === next.productId);
+      const before =
+        existing?.before ??
+        items.find((item) => item.product.productId === next.productId)?.product ??
+        next;
+
+      return [
+        ...prev.filter((c) => c.after.productId !== next.productId),
+        { before, after: next }
+      ];
+    });
+
     setItems((prev) =>
       prev.map((item) =>
         item.product.productId === next.productId ? { ...item, product: next } : item
@@ -151,6 +181,7 @@ export default function BookingPage() {
           totalDurationMinutes={totalDurationOf(items)}
           startAt={startAt}
           conflictSlotStartAt={conflictSlot}
+          changes={changes}
           reloadKey={timeReloadKey}
           onSelect={(value) => {
             setStartAt(value);
@@ -168,6 +199,8 @@ export default function BookingPage() {
           cartCouponGrantId={cartCouponGrantId}
           onSetItemCoupon={setItemCoupon}
           onSetCartCoupon={setCartCouponGrantId}
+          changes={changes}
+          onAcknowledgeChanges={() => setChanges([])}
           onChangeServices={() => setStep(1)}
           onChangeTime={(conflict) => {
             /**
@@ -181,7 +214,7 @@ export default function BookingPage() {
             setTimeReloadKey((k) => k + 1);
             setStep(2);
           }}
-          onProductUpdated={updateProduct}
+          onProductUpdated={recordProductChange}
           onDone={setDone}
         />
       )}

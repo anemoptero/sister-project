@@ -6,7 +6,7 @@ import {
   slotUnavailableDetails,
   type ApiError
 } from '../../api/client';
-import { ProductDiff } from '../../components/ProductDiff';
+import { ProductChangeNotice, type ProductChange } from '../../components/ProductChangeNotice';
 import { ERROR_CODES, type ApiDataOf } from '../../types/api';
 import type { MyCoupon, Product } from '../../types/models';
 import { formatDuration, formatPrice } from '../../utils/format';
@@ -25,6 +25,9 @@ interface Props {
   cartCouponGrantId: string;
   onSetItemCoupon: (index: number, grantId: string) => void;
   onSetCartCoupon: (grantId: string) => void;
+  /** 流程中被改過的療程。未確認前不允許送出 */
+  changes: ProductChange[];
+  onAcknowledgeChanges: () => void;
   onChangeTime: (conflictSlotStartAt: string) => void;
   onChangeServices: () => void;
   onProductUpdated: (product: Product) => void;
@@ -32,12 +35,6 @@ interface Props {
 }
 
 type Preview = ApiDataOf<'previewOrder'>;
-
-/** 產品在流程途中被改過 */
-interface ChangedProduct {
-  before: Product;
-  after: Product;
-}
 
 /**
  * 試算的節流間隔。
@@ -69,6 +66,8 @@ export function StepConfirm({
   cartCouponGrantId,
   onSetItemCoupon,
   onSetCartCoupon,
+  changes,
+  onAcknowledgeChanges,
   onChangeTime,
   onChangeServices,
   onProductUpdated,
@@ -79,7 +78,6 @@ export function StepConfirm({
   const [calculating, setCalculating] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [changed, setChanged] = useState<ChangedProduct | null>(null);
 
   /** 只接受最後一次試算的結果，避免亂序回應把金額停在舊值 */
   const previewSeq = useRef(0);
@@ -144,13 +142,7 @@ export function StepConfirm({
   function handleApiFailure(err: ApiError) {
     const productChange = productChangedDetails(err);
     if (productChange) {
-      const before = items.find(
-        (item) => item.product.productId === productChange.product.productId
-      )?.product;
-
-      // 找不到對應品項時仍要顯示差異，用後端回傳的當前值當作兩邊，
-      // 至少讓顧客看到最新內容而不是一句看不懂的錯誤
-      setChanged({ before: before ?? productChange.product, after: productChange.product });
+      // 差異記錄交給上層保存，才能在被退回選時間頁之後仍然存在
       onProductUpdated(productChange.product);
       return;
     }
@@ -197,27 +189,8 @@ export function StepConfirm({
 
   return (
     <div className="stack">
-      {/* 產品被改過：橫幅而非取代整頁，下方的選擇與金額都還在 */}
-      {changed && (
-        <section className="card notice-card">
-          <h3>療程內容已更新</h3>
-          <p>
-            你在選擇的這段時間裡，「{changed.after.name}」被調整了。
-            以下金額已改為最新內容，確認後再送出一次即可 —— <strong>不需要重新預約</strong>。
-          </p>
-
-          <ProductDiff before={changed.before} after={changed.after} />
-
-          <div className="actions">
-            <button type="button" onClick={() => setChanged(null)}>
-              我已確認變更
-            </button>
-            <button type="button" className="secondary" onClick={onChangeServices}>
-              重新選擇服務
-            </button>
-          </div>
-        </section>
-      )}
+      {/* 橫幅而非取代整頁：下方的選擇與金額都還在，顧客能對照著看 */}
+      <ProductChangeNotice changes={changes} onAcknowledge={onAcknowledgeChanges} />
 
       <section className="card">
         <div className="page-head">
@@ -359,9 +332,15 @@ export function StepConfirm({
         <button
           type="button"
           onClick={() => void handleSubmit()}
-          disabled={submitting || calculating || !preview}
+          // 有未確認的療程變更時不允許送出 —— 這是防止顧客在沒注意到
+          // 價格或時長已變的情況下完成預約的最後一道關卡
+          disabled={submitting || calculating || !preview || changes.length > 0}
         >
-          {submitting ? '送出中…' : '確認預約'}
+          {submitting
+            ? '送出中…'
+            : changes.length > 0
+              ? '請先確認上方變更'
+              : '確認預約'}
         </button>
       </div>
     </div>

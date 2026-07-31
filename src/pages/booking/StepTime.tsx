@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { callApi, isApiError } from '../../api/client';
+import { ProductChangeNotice, type ProductChange } from '../../components/ProductChangeNotice';
 import type { AvailableDay } from '../../types/models';
 import { formatDuration } from '../../utils/format';
 
@@ -8,6 +9,8 @@ interface Props {
   startAt: string;
   /** 衝突時後端指出的那一格，用來標記出來 */
   conflictSlotStartAt: string;
+  /** 流程中被改過的療程。時長變動會直接影響下方的時段，必須說明 */
+  changes: ProductChange[];
   onSelect: (startAt: string) => void;
   onBack: () => void;
   onNext: () => void;
@@ -28,6 +31,7 @@ export function StepTime({
   totalDurationMinutes,
   startAt,
   conflictSlotStartAt,
+  changes,
   onSelect,
   onBack,
   onNext,
@@ -67,6 +71,9 @@ export function StepTime({
           以下是這段時間排得進去的起始時間。
         </p>
       </div>
+
+      {/* 時長若被改過，下方時段會與剛才不同，先說明原因 */}
+      <ProductChangeNotice changes={changes} compact />
 
       {/* 從確認頁被退回來時說明原因，並強調其他選擇都還在 ——
           否則顧客會以為整筆預約作廢了 */}
