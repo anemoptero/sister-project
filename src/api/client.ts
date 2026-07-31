@@ -19,12 +19,22 @@ import {
   type SlotUnavailableDetails,
   type ValidationErrorDetails
 } from '../types/api';
-import { clearSessionToken, getSessionToken } from './session';
+import { clearSession, getSessionToken } from './session';
 
 const API_URL = import.meta.env.VITE_APPS_SCRIPT_URL ?? '';
 
-/** Apps Script 冷啟動偶爾偏慢，20 秒是實測後留有餘裕的值 */
-const DEFAULT_TIMEOUT_MS = 20000;
+/**
+ * 逾時設定。
+ *
+ * ⚠️ 這個值不能設得太緊。Apps Script Web App 的呼叫開銷本身就很大 ——
+ * 實測連 `ping`（不碰 Firestore、只回一個字串）都要 3.4～14.2 秒，
+ * 因為每次請求都要經過 script.google.com → googleusercontent.com 的
+ * 302 轉址，還可能遇上執行個體冷啟動。
+ *
+ * 原本設 20 秒，但實測已出現 14.2 秒，尖峰時會誤判成逾時並讓使用者
+ * 重送一次 —— 而重送只會讓情況更糟。
+ */
+const DEFAULT_TIMEOUT_MS = 45000;
 
 /**
  * 不附帶 sessionToken 的 action。
@@ -259,9 +269,10 @@ export async function callApi<A extends ApiAction>(
   }
 
   if (!parsed.ok) {
-    // session 失效時先清掉本地 token，避免後續每一支 API 都再撞一次牆
+    // session 失效時清掉本地 token 與使用者快取，避免後續每一支 API
+    // 都再撞一次牆，也避免留下「沒有 token 卻有身分」的矛盾狀態
     if (parsed.errorCode === ERROR_CODES.UNAUTHORIZED) {
-      clearSessionToken();
+      clearSession();
       notifyUnauthorized();
     }
     throw new ApiError(

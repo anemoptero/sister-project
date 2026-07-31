@@ -12,7 +12,9 @@ import { useAuth } from '../auth/useAuth';
 function LoadingScreen() {
   return (
     <div className="page">
-      <p className="hint">載入中…</p>
+      <div className="skeleton" style={{ maxWidth: '12rem', height: 24 }} />
+      <div className="skeleton" />
+      <div className="skeleton" />
     </div>
   );
 }

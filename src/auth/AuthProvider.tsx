@@ -1,8 +1,20 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { callApi, isApiError, onUnauthorized } from '../api/client';
-import { clearSessionToken, hasSessionToken, setSessionToken } from '../api/session';
+import {
+  clearSession,
+  getCachedUser,
+  hasSessionToken,
+  setCachedUser,
+  setSessionToken
+} from '../api/session';
 import type { PublicUser } from '../types/models';
 import { AuthContext, type AuthContextValue } from './AuthContext';
+
+/** 快取裡除了使用者本身，也記著上次的 profileComplete，避免多一次判斷 */
+interface CachedAuth {
+  user: PublicUser;
+  profileComplete: boolean;
+}
 
 /**
  * 登入狀態的唯一來源。
@@ -13,12 +25,22 @@ import { AuthContext, type AuthContextValue } from './AuthContext';
  * 見 docs/AGENT_GUIDE.md §4.2。
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<PublicUser | null>(null);
-  const [profileComplete, setProfileComplete] = useState(false);
-  const [initializing, setInitializing] = useState(true);
+  /**
+   * 以快取作為初始值。
+   *
+   * 呼叫 Apps Script 的固定開銷是數秒起跳，若等 `getCurrentUser` 回來才渲染，
+   * 使用者會先看到幾秒空白、頁面自己的資料再等第二次往返。先用快取渲染
+   * 可以把這兩段等待從串行變成並行。
+   */
+  const cached = hasSessionToken() ? getCachedUser<CachedAuth>() : null;
+
+  const [user, setUser] = useState<PublicUser | null>(cached?.user ?? null);
+  const [profileComplete, setProfileComplete] = useState(cached?.profileComplete ?? false);
+  // 有快取就不算初始化中 —— 守衛可以立刻放行，背景再確認
+  const [initializing, setInitializing] = useState(!cached);
 
   const clearLocalAuth = useCallback(() => {
-    clearSessionToken();
+    clearSession();
     setUser(null);
     setProfileComplete(false);
   }, []);
@@ -34,6 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await callApi('getCurrentUser', {});
       setUser(data.user);
       setProfileComplete(data.profileComplete);
+      // 背景確認的結果覆蓋快取，role 或電話有變動時下次開啟就是新的
+      setCachedUser({ user: data.user, profileComplete: data.profileComplete });
     } catch (err) {
       // UNAUTHORIZED 時 client 已清掉 token 並觸發 onUnauthorized，
       // 這裡只要確保狀態一致即可。其他錯誤（例如網路不通）不應該把
@@ -58,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(
     (sessionToken: string, nextUser: PublicUser, nextProfileComplete: boolean) => {
       setSessionToken(sessionToken);
+      setCachedUser({ user: nextUser, profileComplete: nextProfileComplete });
       setUser(nextUser);
       setProfileComplete(nextProfileComplete);
       setInitializing(false);
@@ -77,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearLocalAuth]);
 
   const updateUser = useCallback((nextUser: PublicUser, nextProfileComplete: boolean) => {
+    setCachedUser({ user: nextUser, profileComplete: nextProfileComplete });
     setUser(nextUser);
     setProfileComplete(nextProfileComplete);
   }, []);

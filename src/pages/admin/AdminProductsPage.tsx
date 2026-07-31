@@ -221,10 +221,21 @@ export default function AdminProductsPage() {
       {errorMessage && <p className="error">{errorMessage}</p>}
       {loadError && <p className="error">{loadError}</p>}
 
-      {products === null && !loadError && <p className="hint">載入中…</p>}
+      {/* Apps Script 的回應動輒數秒，純文字的「載入中」很容易被當成當機。
+          骨架至少讓人看得出畫面正在等資料而不是壞了。 */}
+      {products === null && !loadError && (
+        <div className="table-scroll" style={{ padding: 'var(--space-4)' }}>
+          <div className="skeleton" />
+          <div className="skeleton" />
+          <div className="skeleton" />
+        </div>
+      )}
 
       {products?.length === 0 && (
-        <p className="hint">目前沒有任何產品。先新增一個，顧客端才有東西可以預約。</p>
+        <div className="empty-state">
+          <h2>還沒有任何產品</h2>
+          <p>先新增一個，顧客端才有東西可以預約。</p>
+        </div>
       )}
 
       {products && products.length > 0 && (
