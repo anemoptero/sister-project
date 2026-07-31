@@ -3,6 +3,7 @@ import { AuthProvider } from './auth/AuthProvider';
 import { AdminLayout } from './components/AdminLayout';
 import { Layout } from './components/Layout';
 import { RequireAdmin, RequireAuth, RequireProfile } from './components/RouteGuards';
+import AdminProductsPage from './pages/admin/AdminProductsPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
@@ -27,10 +28,7 @@ export default function App() {
           <Route element={<RequireAdmin />}>
             <Route element={<AdminLayout />}>
               <Route path="/admin" element={<PlaceholderPage title="後台首頁" stage="D 段" />} />
-              <Route
-                path="/admin/products"
-                element={<PlaceholderPage title="產品管理" stage="D 段" />}
-              />
+              <Route path="/admin/products" element={<AdminProductsPage />} />
               <Route
                 path="/admin/business-hours"
                 element={<PlaceholderPage title="營業時間" stage="D 段" />}

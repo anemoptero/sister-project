@@ -93,6 +93,136 @@ button:disabled {
   cursor: default;
 }
 
+.field textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 16px;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  resize: vertical;
+}
+
+/* 手機上一欄，桌面才並排 —— 價格與時長並排比較好對照 */
+.field-row {
+  display: grid;
+  gap: 0 16px;
+  grid-template-columns: 1fr;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+}
+
+.checkbox input {
+  width: auto;
+}
+
+.image-preview {
+  max-height: 160px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+button.secondary {
+  background: #fff;
+  color: #111827;
+  border: 1px solid #d1d5db;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 20px 16px;
+}
+
+.card h2 {
+  margin-top: 0;
+}
+
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* --- 表格 --- */
+
+/* 寬表格在手機上自己橫向捲動，不撐破版面 */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e7eb;
+  vertical-align: top;
+}
+
+.data-table thead th {
+  font-size: 0.9rem;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.row-disabled td {
+  color: #9ca3af;
+}
+
+.cell-sub {
+  margin: 4px 0 0;
+  max-width: 32ch;
+}
+
+.cell-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.diff-table {
+  border-collapse: collapse;
+  margin: 16px 0;
+  background: #fff;
+}
+
+.diff-table th,
+.diff-table td {
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  text-align: left;
+}
+
+.diff-before {
+  color: #6b7280;
+  text-decoration: line-through;
+}
+
+.diff-after {
+  color: #b45309;
+  font-weight: 600;
+}
+
 .notice {
   padding: 12px 14px;
   border-radius: 6px;
@@ -205,6 +335,10 @@ button:disabled {
 @media (min-width: 768px) {
   .page {
     padding: 32px 24px;
+  }
+
+  .field-row {
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .app-account {
