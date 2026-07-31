@@ -5,14 +5,12 @@ import type { Coupon, Product } from '../../types/models';
 import { formatPrice } from '../../utils/format';
 import { CampaignPanel } from './CampaignPanel';
 import { CouponForm } from './CouponForm';
-import { GrantPanel } from './GrantPanel';
 
-type Tab = 'coupons' | 'campaigns' | 'grants';
+type Tab = 'coupons' | 'campaigns';
 
 const TAB_LABELS: Record<Tab, string> = {
   coupons: '優惠券',
-  campaigns: '發放活動',
-  grants: '發放與紀錄'
+  campaigns: '發放活動'
 };
 
 /**
@@ -225,7 +223,6 @@ export default function AdminCouponsPage() {
       )}
 
       {tab === 'campaigns' && <CampaignPanel coupons={coupons ?? []} />}
-      {tab === 'grants' && <GrantPanel />}
     </div>
   );
 }

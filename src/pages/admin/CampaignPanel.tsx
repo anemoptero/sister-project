@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { callApi, isApiError, validationField } from '../../api/client';
 import type { ApiActionMap } from '../../types/api';
-import type { Campaign, Coupon, CouponGrantType } from '../../types/models';
+import type { AdminCustomer, Campaign, Coupon, CouponGrantType, Grant } from '../../types/models';
 import { isoToLocalInput, localInputToIso } from '../../utils/datetime';
 import { formatDateTime } from '../../utils/format';
 import { parseIntStrict } from '../../utils/number';
+import { MemberPicker } from './MemberPicker';
 
 type CreatePayload = ApiActionMap['adminCreateCampaign']['payload'];
 
@@ -14,25 +15,38 @@ const GRANT_TYPE_LABELS: Record<CouponGrantType, string> = {
   claim: '顧客憑連結領取'
 };
 
-/**
- * 發放活動：怎麼發、發多少、發多久。
- *
- * 與券分開是因為生命週期不同 —— 同一張券可以被多個活動發放，
- * 券的有效期、活動的期間、個人持有的到期日三者互不相同。
- */
+/** 後端上限 400（Firestore 單次 commit 500 個寫入，留給活動計數與餘裕） */
+const MAX_BATCH = 400;
+
 export function CampaignPanel({ coupons }: { coupons: Coupon[] }) {
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
+  const [customers, setCustomers] = useState<AdminCustomer[]>([]);
   const [editing, setEditing] = useState<Campaign | 'new' | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     setError('');
-    try {
-      const data = await callApi('adminListCampaigns', {});
-      setCampaigns(data.campaigns);
-    } catch (err) {
-      setError(isApiError(err) ? err.message : '載入發放活動失敗。');
+
+    // 兩者互不相依，其中一支失敗時另一支的結果仍然有用
+    const [campaignResult, customerResult] = await Promise.allSettled([
+      callApi('adminListCampaigns', {}),
+      callApi('adminListCustomers', { limit: 200 })
+    ]);
+
+    if (campaignResult.status === 'fulfilled') {
+      setCampaigns(campaignResult.value.campaigns);
+    } else {
+      setCampaigns([]);
+      setError(
+        `發放活動載入失敗：${
+          isApiError(campaignResult.reason) ? campaignResult.reason.message : '請稍後再試'
+        }`
+      );
+    }
+
+    if (customerResult.status === 'fulfilled') {
+      setCustomers(customerResult.value.customers);
     }
   }, []);
 
@@ -46,8 +60,10 @@ export function CampaignPanel({ coupons }: { coupons: Coupon[] }) {
   if (editing) {
     return (
       <CampaignForm
+        key={editing === 'new' ? 'new' : editing.campaignId}
         initial={editing === 'new' ? undefined : editing}
         coupons={coupons}
+        customers={customers}
         onCancel={() => setEditing(null)}
         onSaved={(text) => {
           setEditing(null);
@@ -62,17 +78,28 @@ export function CampaignPanel({ coupons }: { coupons: Coupon[] }) {
     <div className="stack">
       <div className="page-head">
         <h2>發放活動</h2>
-        <button type="button" onClick={() => { setMessage(''); setEditing('new'); }}>
+        <button
+          type="button"
+          onClick={() => {
+            setMessage('');
+            setEditing('new');
+          }}
+          disabled={coupons.length === 0}
+        >
           新增活動
         </button>
       </div>
+
+      {coupons.length === 0 && (
+        <p className="notice">請先建立至少一張優惠券，活動才知道要發什麼。</p>
+      )}
 
       {message && <p className="success">{message}</p>}
       {error && <p className="error">{error}</p>}
 
       {campaigns === null && !error && <div className="skeleton" />}
 
-      {campaigns?.length === 0 && (
+      {campaigns?.length === 0 && !error && (
         <div className="empty-state">
           <h2>還沒有發放活動</h2>
           <p>券要先透過活動發給會員，顧客才拿得到 —— 沒有活動就沒有人有券可用。</p>
@@ -122,7 +149,10 @@ export function CampaignPanel({ coupons }: { coupons: Coupon[] }) {
                     <button
                       type="button"
                       className="secondary small"
-                      onClick={() => { setMessage(''); setEditing(campaign); }}
+                      onClick={() => {
+                        setMessage('');
+                        setEditing(campaign);
+                      }}
                     >
                       編輯
                     </button>
@@ -142,14 +172,31 @@ export function CampaignPanel({ coupons }: { coupons: Coupon[] }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// 活動表單
+// ---------------------------------------------------------------------------
+
+/**
+ * 建立與編輯共用。
+ *
+ * **哪些欄位在編輯時鎖死，是由後端決定的，不是設計偏好。**
+ * `adminUpdateCampaign` 只接受 name / startAt / endAt / maxGrants /
+ * maxTotalUsage / enabled 六個欄位，其餘傳了會被靜默忽略。與其讓管理員
+ * 改了以為有效，不如直接停用並說明原因。
+ *
+ * 其中 `claimToken` 特別要緊：領取連結一旦發出去就永遠指向這個活動，
+ * 改了會讓所有已發布的連結失效，而那些連結可能已經貼在官方帳號的訊息裡。
+ */
 function CampaignForm({
   initial,
   coupons,
+  customers,
   onCancel,
   onSaved
 }: {
   initial?: Campaign;
   coupons: Coupon[];
+  customers: AdminCustomer[];
   onCancel: () => void;
   onSaved: (message: string) => void;
 }) {
@@ -165,14 +212,43 @@ function CampaignForm({
   const [claimToken, setClaimToken] = useState(initial?.claimToken ?? '');
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
 
+  /** 尚未送出的發放對象 */
+  const [pending, setPending] = useState<string[]>([]);
+  const [grants, setGrants] = useState<Grant[] | null>(null);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [errorField, setErrorField] = useState('');
+  const [notice, setNotice] = useState('');
+
+  const loadGrants = useCallback(async (campaignId: string) => {
+    try {
+      const data = await callApi('adminListGrants', { campaignId, limit: 200 });
+      setGrants(data.grants);
+    } catch (err) {
+      setError(isApiError(err) ? err.message : '載入領取紀錄失敗。');
+      setGrants([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (initial) void loadGrants(initial.campaignId);
+    else setGrants([]);
+  }, [initial, loadGrants]);
+
+  // 已收回的不算持有者，因此回收之後該會員會自動從「已發放」消失，
+  // 也就能再次被加入發放對象
+  const activeGrants = (grants ?? []).filter((g) => !g.revokedAt);
+  const grantedUids = activeGrants.map((g) => g.uid);
+
+  const customerName = (uid: string) =>
+    customers.find((c) => c.uid === uid)?.displayName || uid;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError('');
     setErrorField('');
+    setNotice('');
 
     if (!couponId) return setError('請選擇要發放的券。');
     if (!name.trim()) return setError('請填寫活動名稱。');
@@ -180,36 +256,76 @@ function CampaignForm({
       return setError('領取連結需要領取碼，且全系統唯一。');
     }
 
-    const grants = parseIntStrict(maxGrants);
-    const usage = parseIntStrict(maxTotalUsage);
-    if (grants === null || grants < 0) return setError('發放上限必須是 0 以上的整數。');
-    if (usage === null || usage < 0) return setError('核銷上限必須是 0 以上的整數。');
+    const grantsLimit = parseIntStrict(maxGrants);
+    const usageLimit = parseIntStrict(maxTotalUsage);
+    if (grantsLimit === null || grantsLimit < 0) return setError('發放上限必須是 0 以上的整數。');
+    if (usageLimit === null || usageLimit < 0) return setError('核銷上限必須是 0 以上的整數。');
 
-    const values: CreatePayload = {
-      couponId,
-      name: name.trim(),
-      grantType,
-      maxGrants: grants,
-      maxTotalUsage: usage,
-      enabled
-    };
-
-    if (startAt) values.startAt = localInputToIso(startAt);
-    // 空字串代表「不設結束時間」，也就是長期活動。
-    // 送 null 明確表示清除，而不是省略欄位 —— 編輯時省略會維持原值
-    values.endAt = endAt ? localInputToIso(endAt) : null;
-
-    if (grantType === 'claim') values.claimToken = claimToken.trim();
-    if (grantType === 'auto') values.autoTrigger = 'signup';
+    if (startAt && endAt && new Date(startAt).getTime() >= new Date(endAt).getTime()) {
+      return setError('開始時間必須早於結束時間。');
+    }
 
     setSubmitting(true);
     try {
+      let campaignId = initial?.campaignId ?? '';
+
       if (initial) {
-        await callApi('adminUpdateCampaign', { campaignId: initial.campaignId, ...values });
-        onSaved(`已更新「${values.name}」。`);
+        // 只送後端接受的六個欄位。其餘傳了也會被忽略，
+        // 不送才能讓行為與畫面上的鎖定一致
+        await callApi('adminUpdateCampaign', {
+          campaignId: initial.campaignId,
+          name: name.trim(),
+          startAt: startAt ? localInputToIso(startAt) : '',
+          endAt: endAt ? localInputToIso(endAt) : '',
+          maxGrants: grantsLimit,
+          maxTotalUsage: usageLimit,
+          enabled
+        });
       } else {
-        await callApi('adminCreateCampaign', values);
-        onSaved(`已新增「${values.name}」。`);
+        const values: CreatePayload = {
+          couponId,
+          name: name.trim(),
+          grantType,
+          maxGrants: grantsLimit,
+          maxTotalUsage: usageLimit,
+          enabled
+        };
+        if (startAt) values.startAt = localInputToIso(startAt);
+        values.endAt = endAt ? localInputToIso(endAt) : null;
+        if (grantType === 'claim') values.claimToken = claimToken.trim();
+        if (grantType === 'auto') values.autoTrigger = 'signup';
+
+        const created = await callApi('adminCreateCampaign', values);
+        campaignId = created.campaignId;
+      }
+
+      if (pending.length > 0) {
+        try {
+          const result = await callApi('adminGrantCoupon', { campaignId, uids: pending });
+          const skippedNote =
+            result.skipped.length > 0
+              ? `，${result.skipped.length} 位因已達持有上限而略過`
+              : '';
+          onSaved(`已儲存「${name.trim()}」並發放 ${result.granted} 張${skippedNote}。`);
+        } catch (grantErr) {
+          /**
+           * 活動已經建立/更新成功，只有發放失敗。
+           *
+           * 這裡**不能**回報整體失敗 —— 管理員會以為活動沒建成功而重新
+           * 建立一次，結果多出一個重複的活動。必須明確區分兩者。
+           */
+          setNotice(
+            `活動已儲存，但發放未完成：${
+              isApiError(grantErr) ? grantErr.message : '請稍後再試'
+            }。請重新整理後於編輯畫面再次加入這些會員。`
+          );
+          setPending([]);
+          if (campaignId) await loadGrants(campaignId);
+          setSubmitting(false);
+          return;
+        }
+      } else {
+        onSaved(`已儲存「${name.trim()}」。`);
       }
     } catch (err) {
       if (isApiError(err)) {
@@ -223,139 +339,272 @@ function CampaignForm({
     }
   }
 
+  async function handleRevoke(grantId: string) {
+    setError('');
+    try {
+      await callApi('adminRevokeGrant', { grantId });
+      if (initial) await loadGrants(initial.campaignId);
+    } catch (err) {
+      setError(isApiError(err) ? err.message : '收回失敗。');
+    }
+  }
+
+  const showMembers = grantType === 'admin';
+  const grantedCount = initial?.grantedCount ?? 0;
+
   return (
-    <form className="card" onSubmit={(e) => void handleSubmit(e)}>
-      <h2>{isEdit ? '編輯發放活動' : '新增發放活動'}</h2>
+    <form className="stack" onSubmit={(e) => void handleSubmit(e)}>
+      <section className="card">
+        <h2>{isEdit ? '編輯發放活動' : '新增發放活動'}</h2>
 
-      <div className="field-row">
-        <div className="field">
-          <label htmlFor="cp-coupon">發放哪張券</label>
-          <select id="cp-coupon" value={couponId} onChange={(e) => setCouponId(e.target.value)}>
-            {coupons.length === 0 && <option value="">尚未建立任何券</option>}
-            {coupons.map((coupon) => (
-              <option key={coupon.couponId} value={coupon.couponId}>
-                {coupon.name}（{coupon.code}）
-              </option>
-            ))}
-          </select>
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="cp-coupon">發放哪張券</label>
+            <select
+              id="cp-coupon"
+              value={couponId}
+              onChange={(e) => setCouponId(e.target.value)}
+              disabled={isEdit}
+            >
+              {coupons.map((coupon) => (
+                <option key={coupon.couponId} value={coupon.couponId}>
+                  {coupon.name}（{coupon.code}）
+                </option>
+              ))}
+            </select>
+            {isEdit && <p className="hint">建立後不可更換 —— 已發出的券已經綁定這張。</p>}
+          </div>
+
+          <div className="field">
+            <label htmlFor="cp-name">活動名稱</label>
+            <input
+              id="cp-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              aria-invalid={errorField === 'name'}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="cp-type">發放方式</label>
+            <select
+              id="cp-type"
+              value={grantType}
+              onChange={(e) => setGrantType(e.target.value as CouponGrantType)}
+              disabled={isEdit}
+            >
+              {(Object.keys(GRANT_TYPE_LABELS) as CouponGrantType[]).map((value) => (
+                <option key={value} value={value}>
+                  {GRANT_TYPE_LABELS[value]}
+                </option>
+              ))}
+            </select>
+            {isEdit && <p className="hint">建立後不可更改。</p>}
+          </div>
+        </div>
+
+        {grantType === 'claim' && (
+          <div className="field">
+            <label htmlFor="cp-token">領取碼</label>
+            <input
+              id="cp-token"
+              value={claimToken}
+              onChange={(e) => setClaimToken(e.target.value)}
+              placeholder="SUMMER2026"
+              disabled={isEdit}
+              aria-invalid={errorField === 'claimToken'}
+            />
+            {isEdit ? (
+              <p className="hint">
+                建立後不可更改 —— 已發布的領取連結永遠指向這個領取碼，
+                改了會讓所有發出去的連結失效。
+              </p>
+            ) : (
+              <p className="notice">
+                ⚠️ 領取連結<strong>可以被轉傳</strong>。綁定發生在領取的當下，
+                所以「用」不能轉讓，但「領」可以。務必搭配發放上限或活動期間。
+              </p>
+            )}
+          </div>
+        )}
+
+        {grantType === 'auto' && !isEdit && (
+          <p className="hint">第一階段只支援「首次註冊時自動發放」。</p>
+        )}
+
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="cp-start">開始時間</label>
+            <input
+              id="cp-start"
+              type="datetime-local"
+              value={startAt}
+              onChange={(e) => setStartAt(e.target.value)}
+            />
+            <p className="hint">留空表示立即開始。</p>
+          </div>
+
+          <div className="field">
+            <label htmlFor="cp-end">結束時間</label>
+            <input
+              id="cp-end"
+              type="datetime-local"
+              value={endAt}
+              onChange={(e) => setEndAt(e.target.value)}
+            />
+            <p className="hint">留空表示長期活動。</p>
+          </div>
+
+          <div />
+        </div>
+
+        <div className="field-row">
+          <div className="field">
+            <label htmlFor="cp-max-grants">最多發出幾張</label>
+            <input
+              id="cp-max-grants"
+              type="number"
+              min={grantedCount}
+              step={1}
+              value={maxGrants}
+              onChange={(e) => setMaxGrants(e.target.value)}
+              aria-invalid={errorField === 'maxGrants'}
+            />
+            <p className="hint">
+              發放端閘門。0 表示不限。
+              {grantedCount > 0 && `不可小於已發放的 ${grantedCount} 張。`}
+            </p>
+          </div>
+
+          <div className="field">
+            <label htmlFor="cp-max-usage">最多核銷幾次</label>
+            <input
+              id="cp-max-usage"
+              type="number"
+              min={initial?.usedCount ?? 0}
+              step={1}
+              value={maxTotalUsage}
+              onChange={(e) => setMaxTotalUsage(e.target.value)}
+              aria-invalid={errorField === 'maxTotalUsage'}
+            />
+            <p className="hint">
+              成本端閘門。0 表示不限。
+              {(initial?.usedCount ?? 0) > 0 && `不可小於已核銷的 ${initial?.usedCount} 次。`}
+            </p>
+          </div>
+
+          <div />
         </div>
 
         <div className="field">
-          <label htmlFor="cp-name">活動名稱</label>
-          <input id="cp-name" value={name} onChange={(e) => setName(e.target.value)} />
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+            />
+            啟用
+          </label>
         </div>
+      </section>
 
-        <div className="field">
-          <label htmlFor="cp-type">發放方式</label>
-          <select
-            id="cp-type"
-            value={grantType}
-            onChange={(e) => setGrantType(e.target.value as CouponGrantType)}
-          >
-            {(Object.keys(GRANT_TYPE_LABELS) as CouponGrantType[]).map((value) => (
-              <option key={value} value={value}>
-                {GRANT_TYPE_LABELS[value]}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {grantType === 'claim' && (
-        <div className="field">
-          <label htmlFor="cp-token">領取碼</label>
-          <input
-            id="cp-token"
-            value={claimToken}
-            onChange={(e) => setClaimToken(e.target.value)}
-            placeholder="SUMMER2026"
-            aria-invalid={errorField === 'claimToken'}
-          />
-          <p className="notice">
-            ⚠️ 領取連結<strong>可以被轉傳</strong>。綁定是在領取的當下發生，
-            所以「用」不能轉讓，但「領」可以。務必搭配發放上限、每人持有上限或活動期間，
-            否則會重蹈代碼制被外流的覆轍。
+      {showMembers && (
+        <section className="card">
+          <h2>發放對象</h2>
+          <p className="hint">
+            {isEdit
+              ? '加入的會員會在儲存時收到券。已發放的無法從這裡移除，要收回請用下方的領取紀錄。'
+              : '選擇的會員會在活動建立後立即收到券。也可以先不選，之後再編輯加入。'}
           </p>
-        </div>
+
+          <MemberPicker
+            customers={customers}
+            pending={pending}
+            granted={grantedUids}
+            max={MAX_BATCH}
+            onAdd={(uid) => setPending((prev) => [...prev, uid])}
+            onRemove={(uid) => setPending((prev) => prev.filter((id) => id !== uid))}
+          />
+        </section>
       )}
 
-      {grantType === 'auto' && (
-        <p className="hint">第一階段只支援「首次註冊時自動發放」。</p>
-      )}
-
-      <div className="field-row">
-        <div className="field">
-          <label htmlFor="cp-start">開始時間</label>
-          <input
-            id="cp-start"
-            type="datetime-local"
-            value={startAt}
-            onChange={(e) => setStartAt(e.target.value)}
-          />
-          <p className="hint">留空表示立即開始。</p>
-        </div>
-
-        <div className="field">
-          <label htmlFor="cp-end">結束時間</label>
-          <input
-            id="cp-end"
-            type="datetime-local"
-            value={endAt}
-            onChange={(e) => setEndAt(e.target.value)}
-          />
-          <p className="hint">留空表示長期活動。</p>
-        </div>
-
-        <div />
-      </div>
-
-      <div className="field-row">
-        <div className="field">
-          <label htmlFor="cp-max-grants">最多發出幾張</label>
-          <input
-            id="cp-max-grants"
-            type="number"
-            min={0}
-            step={1}
-            value={maxGrants}
-            onChange={(e) => setMaxGrants(e.target.value)}
-          />
-          <p className="hint">發放端閘門。0 表示不限。</p>
-        </div>
-
-        <div className="field">
-          <label htmlFor="cp-max-usage">最多核銷幾次</label>
-          <input
-            id="cp-max-usage"
-            type="number"
-            min={0}
-            step={1}
-            value={maxTotalUsage}
-            onChange={(e) => setMaxTotalUsage(e.target.value)}
-          />
-          <p className="hint">成本端閘門。0 表示不限。</p>
-        </div>
-
-        <div />
-      </div>
-
-      <div className="field">
-        <label className="checkbox">
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-          啟用
-        </label>
-      </div>
-
+      {notice && <p className="notice">{notice}</p>}
       {error && <p className="error">{error}</p>}
 
       <div className="actions">
         <button type="submit" disabled={submitting}>
-          {submitting ? '儲存中…' : '儲存'}
+          {submitting ? '儲存中…' : pending.length > 0 ? `儲存並發放 ${pending.length} 張` : '儲存'}
         </button>
         <button type="button" className="secondary" onClick={onCancel} disabled={submitting}>
-          取消
+          {isEdit ? '返回列表' : '取消'}
         </button>
       </div>
+
+      {isEdit && (
+        <section className="card">
+          <h2>領取紀錄</h2>
+
+          {grants === null && <div className="skeleton" />}
+          {grants?.length === 0 && <p className="hint">這個活動尚未發出任何券。</p>}
+
+          {grants && grants.length > 0 && (
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>會員</th>
+                    <th>發放時間</th>
+                    <th>到期</th>
+                    <th>狀態</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {grants.map((grant) => {
+                    const status = grant.revokedAt
+                      ? '已收回'
+                      : grant.usedAt
+                        ? '已使用'
+                        : new Date(grant.expiresAt).getTime() < Date.now()
+                          ? '已過期'
+                          : '可使用';
+
+                    return (
+                      <tr key={grant.grantId} className={grant.revokedAt ? 'row-disabled' : ''}>
+                        <td>{customerName(grant.uid)}</td>
+                        <td>{formatDateTime(grant.grantedAt)}</td>
+                        <td>{formatDateTime(grant.expiresAt)}</td>
+                        <td>
+                          <span className={`tag ${status === '可使用' ? 'tag--on' : 'tag--off'}`}>
+                            {status}
+                          </span>
+                        </td>
+                        <td>
+                          {/* 已使用的不可收回 —— 那要走訂單取消才能正確還原金額與時段 */}
+                          {status === '可使用' && (
+                            <button
+                              type="button"
+                              className="secondary small"
+                              onClick={() => void handleRevoke(grant.grantId)}
+                            >
+                              收回
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <p className="hint">
+            收回之後該會員會從上方的「已發放」消失，可以再次被加入發放對象。
+            已使用的券要透過取消訂單才能還原 —— 那個流程會同時復原金額、時段與券。
+          </p>
+        </section>
+      )}
     </form>
   );
 }
