@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { callApi, isApiError, validationField } from '../../api/client';
+import { Modal } from '../../components/Modal';
 import type { ApiActionMap } from '../../types/api';
 import type { AdminCustomer, Campaign, Coupon, CouponGrantType, Grant } from '../../types/models';
 import { isoToLocalInput, localInputToIso } from '../../utils/datetime';
@@ -234,6 +235,9 @@ function CampaignForm({
   const [error, setError] = useState('');
   const [errorField, setErrorField] = useState('');
   const [notice, setNotice] = useState('');
+  /** 待確認收回的持有紀錄。收回不可逆，不該點一下就執行 */
+  const [confirmRevoke, setConfirmRevoke] = useState<Grant | null>(null);
+  const [revoking, setRevoking] = useState('');
 
   const loadGrants = useCallback(async (campaignId: string) => {
     try {
@@ -388,13 +392,17 @@ function CampaignForm({
     }
   }
 
-  async function handleRevoke(grantId: string) {
+  async function handleRevoke(grant: Grant) {
+    setRevoking(grant.grantId);
     setError('');
     try {
-      await callApi('adminRevokeGrant', { grantId });
+      await callApi('adminRevokeGrant', { grantId: grant.grantId });
       if (initial) await loadGrants(initial.campaignId);
+      setConfirmRevoke(null);
     } catch (err) {
       setError(isApiError(err) ? err.message : '收回失敗。');
+    } finally {
+      setRevoking('');
     }
   }
 
@@ -664,7 +672,7 @@ function CampaignForm({
                             <button
                               type="button"
                               className="secondary small"
-                              onClick={() => void handleRevoke(grant.grantId)}
+                              onClick={() => setConfirmRevoke(grant)}
                             >
                               收回
                             </button>
@@ -683,6 +691,41 @@ function CampaignForm({
             已使用的券要透過取消訂單才能還原 —— 那個流程會同時復原金額、時段與券。
           </p>
         </section>
+      )}
+
+      {confirmRevoke && (
+        <Modal
+          title="確定要收回這張券嗎？"
+          busy={Boolean(revoking)}
+          onClose={() => setConfirmRevoke(null)}
+        >
+          <p>
+            將收回 <strong>{customerName(confirmRevoke.uid)}</strong> 持有的這張券，
+            對方將無法再使用它。
+          </p>
+          <p className="hint">
+            收回後該會員可以再次被加入發放對象。但<strong>活動的發放額度不會退還</strong> ——
+            上限記錄的是累計發出過幾張。
+          </p>
+          <div className="actions">
+            <button
+              type="button"
+              className="danger"
+              onClick={() => void handleRevoke(confirmRevoke)}
+              disabled={Boolean(revoking)}
+            >
+              {revoking ? '收回中…' : '確定收回'}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => setConfirmRevoke(null)}
+              disabled={Boolean(revoking)}
+            >
+              保留
+            </button>
+          </div>
+        </Modal>
       )}
     </form>
   );

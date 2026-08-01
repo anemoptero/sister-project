@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { callApi, isApiError } from '../../api/client';
+import { Modal } from '../../components/Modal';
 import type { Appointment, AppointmentStatus } from '../../types/models';
 import { formatDuration } from '../../utils/format';
 
@@ -103,9 +104,12 @@ export default function MyAppointmentsPage() {
 
       {/* 取消是不可逆的，而且會連帶作廢訂單，必須明確說清楚再執行 */}
       {confirming && (
-        <div className="card notice-card">
-          <h3>確定要取消這筆預約嗎？</h3>
-          <p>{formatDateTimeLong(confirming.startAt)}</p>
+        <Modal
+          title="確定要取消這筆預約嗎？"
+          busy={Boolean(cancelling)}
+          onClose={() => setConfirming(null)}
+        >
+          <p className="confirm-time">{formatDateTimeLong(confirming.startAt)}</p>
           <p>
             取消後這個時段會釋出給其他客人，<strong>無法復原</strong>。
             這筆預約的訂單會一併作廢，使用的優惠券會退回你的帳戶。
@@ -113,6 +117,7 @@ export default function MyAppointmentsPage() {
           <div className="actions">
             <button
               type="button"
+              className="danger"
               onClick={() => void handleCancel(confirming)}
               disabled={Boolean(cancelling)}
             >
@@ -127,7 +132,7 @@ export default function MyAppointmentsPage() {
               保留預約
             </button>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
