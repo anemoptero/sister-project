@@ -1386,3 +1386,222 @@ button.danger:hover:not(:disabled) {
 .success > p:last-child {
   margin-bottom: 0;
 }
+
+/* ==========================================================================
+   後台查詢：篩選、統計數字、圖表
+   ========================================================================== */
+
+/* 篩選控制集中在內容上方一列 */
+.filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.filter-fields {
+  display: grid;
+  gap: var(--space-3) var(--space-4);
+  grid-template-columns: 1fr;
+}
+
+.filter-fields .field {
+  margin-bottom: 0;
+}
+
+.stat-row {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(2, 1fr);
+  margin-bottom: var(--space-5);
+}
+
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  letter-spacing: var(--tracking-wide);
+}
+
+/* 數字用 tabular-nums：切換區間時位數變動不會讓版面左右跳 */
+.stat-value {
+  font-size: 1.5rem;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- 直條圖 --- */
+
+.chart {
+  margin: 0 0 var(--space-3);
+}
+
+.chart-plot {
+  display: flex;
+  align-items: flex-end;
+  /* 長條之間留 2px 底色間隙，相鄰的量才不會看起來連成一片 */
+  gap: 2px;
+  height: 12rem;
+  padding-top: var(--space-5);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chart-col {
+  position: relative;
+  flex: 1 0 1.75rem;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.chart-bar {
+  width: 100%;
+  min-height: 2px;
+  padding: 0;
+  border: none;
+  /* 資料端圓角 4px，貼齊基線的那端維持直角 */
+  border-radius: 4px 4px 0 0;
+  background: var(--color-accent);
+  transition: background var(--transition);
+}
+
+.chart-bar:hover:not(:disabled),
+.chart-bar:focus-visible,
+.chart-bar.is-peak {
+  background: var(--color-primary);
+}
+
+/* 數值標籤走文字色，不套數列顏色 */
+.chart-tip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  color: var(--color-text);
+  padding-bottom: var(--space-1);
+  pointer-events: none;
+}
+
+.chart-tip.is-hovered {
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  box-shadow: var(--shadow-md);
+  z-index: 1;
+}
+
+.chart-label {
+  margin-top: var(--space-2);
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  /* 期間標籤在日檢視下很密，斜放才不會互相重疊 */
+  transform: rotate(-45deg);
+  transform-origin: top left;
+  height: 2.5rem;
+  align-self: flex-start;
+}
+
+/* --- 水平長條 --- */
+
+.hbar-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.hbar-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.hbar-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.hbar-track {
+  height: 12px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-alt);
+  overflow: hidden;
+}
+
+.hbar-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+}
+
+.hbar-value {
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 768px) {
+  .filter-bar {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+
+  .filter-fields {
+    grid-template-columns: repeat(3, minmax(9rem, 1fr));
+  }
+
+  .stat-row {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .hbar-row {
+    grid-template-columns: 12rem 1fr 10rem;
+    gap: var(--space-4);
+  }
+}
+
+/* 今日預約：時間置左，一眼掃過去就是行程表 */
+.today-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+
+.today-time {
+  font-size: 1.35rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-primary);
+  flex: none;
+}
+
+.today-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}

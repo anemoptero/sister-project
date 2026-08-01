@@ -6,7 +6,12 @@ import { RequireAdmin, RequireAuth, RequireProfile } from './components/RouteGua
 import { AppearanceProvider } from './theme/AppearanceProvider';
 import AdminAppearancePage from './pages/admin/AdminAppearancePage';
 import AdminBusinessHoursPage from './pages/admin/AdminBusinessHoursPage';
+import AdminAppointmentsPage from './pages/admin/AdminAppointmentsPage';
 import AdminCouponsPage from './pages/admin/AdminCouponsPage';
+import AdminHomePage from './pages/admin/AdminHomePage';
+import AdminCustomersPage from './pages/admin/AdminCustomersPage';
+import AdminOrdersPage from './pages/admin/AdminOrdersPage';
+import AdminStatsPage from './pages/admin/AdminStatsPage';
 import AdminProductsPage from './pages/admin/AdminProductsPage';
 import BookingPage from './pages/booking/BookingPage';
 import HomePage from './pages/HomePage';
@@ -16,7 +21,6 @@ import MyCouponsPage from './pages/my/MyCouponsPage';
 import MyOrdersPage from './pages/my/MyOrdersPage';
 import ProductsPage from './pages/ProductsPage';
 import NotFoundPage from './pages/NotFoundPage';
-import PlaceholderPage from './pages/PlaceholderPage';
 import ProfilePage from './pages/ProfilePage';
 
 /**
@@ -37,26 +41,14 @@ export default function App() {
           {/* --- 後台 --- */}
           <Route element={<RequireAdmin />}>
             <Route element={<AdminLayout />}>
-              <Route path="/admin" element={<PlaceholderPage title="後台首頁" stage="D 段" />} />
+              <Route path="/admin" element={<AdminHomePage />} />
               <Route path="/admin/products" element={<AdminProductsPage />} />
               <Route path="/admin/business-hours" element={<AdminBusinessHoursPage />} />
               <Route path="/admin/coupons" element={<AdminCouponsPage />} />
-              <Route
-                path="/admin/customers"
-                element={<PlaceholderPage title="會員管理" stage="F 段" />}
-              />
-              <Route
-                path="/admin/orders"
-                element={<PlaceholderPage title="訂單查詢" stage="F 段" />}
-              />
-              <Route
-                path="/admin/appointments"
-                element={<PlaceholderPage title="預約查詢" stage="F 段" />}
-              />
-              <Route
-                path="/admin/stats"
-                element={<PlaceholderPage title="銷售統計" stage="F 段" />}
-              />
+              <Route path="/admin/customers" element={<AdminCustomersPage />} />
+              <Route path="/admin/orders" element={<AdminOrdersPage />} />
+              <Route path="/admin/appointments" element={<AdminAppointmentsPage />} />
+              <Route path="/admin/stats" element={<AdminStatsPage />} />
               <Route path="/admin/appearance" element={<AdminAppearancePage />} />
             </Route>
           </Route>
