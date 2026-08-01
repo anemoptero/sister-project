@@ -305,11 +305,15 @@ export function StepConfirm({
 
           <div className="confirm-line confirm-final">
             <span>應付金額</span>
+            {/* 三種狀態必須分開：計算中、算不出來、算好了。
+                把「沒有結果」當成「計算中」會讓試算失敗後永遠停在計算中。 */}
             <span>
-              {calculating || !preview ? (
+              {calculating ? (
                 <span className="hint">計算中…</span>
-              ) : (
+              ) : preview ? (
                 formatPrice(preview.pricing.finalAmount)
+              ) : (
+                <span className="hint">—</span>
               )}
             </span>
           </div>
@@ -320,13 +324,21 @@ export function StepConfirm({
         )}
       </section>
 
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <div className="error">
+          <p>{error}</p>
+          {/* 試算失敗幾乎都是券的資格問題，直接給出下一步該做什麼 */}
+          {!calculating && !preview && (
+            <p>請改選其他優惠券，或選擇「不使用優惠券」後再試。</p>
+          )}
+        </div>
+      )}
 
       <div className="summary-bar">
         <div>
           <span className="hint">應付金額</span>
           <strong>
-            {calculating || !preview ? '計算中…' : formatPrice(preview.pricing.finalAmount)}
+            {calculating ? '計算中…' : preview ? formatPrice(preview.pricing.finalAmount) : '—'}
           </strong>
         </div>
         <button
@@ -336,15 +348,35 @@ export function StepConfirm({
           // 價格或時長已變的情況下完成預約的最後一道關卡
           disabled={submitting || calculating || !preview || changes.length > 0}
         >
-          {submitting
-            ? '送出中…'
-            : changes.length > 0
-              ? '請先確認上方變更'
-              : '確認預約'}
+          {submitLabel({ submitting, calculating, hasPreview: Boolean(preview), changes: changes.length })}
         </button>
       </div>
     </div>
   );
+}
+
+/**
+ * 送出按鈕的文字。
+ *
+ * 按鈕停用時一定要說明原因 —— 一顆灰掉卻寫著「確認預約」的按鈕，
+ * 顧客只會反覆點它，不知道自己該做什麼。
+ */
+function submitLabel({
+  submitting,
+  calculating,
+  hasPreview,
+  changes
+}: {
+  submitting: boolean;
+  calculating: boolean;
+  hasPreview: boolean;
+  changes: number;
+}): string {
+  if (submitting) return '送出中…';
+  if (changes > 0) return '請先確認上方變更';
+  if (calculating) return '計算中…';
+  if (!hasPreview) return '請先調整優惠券';
+  return '確認預約';
 }
 
 function describeCoupon(coupon: MyCoupon): string {

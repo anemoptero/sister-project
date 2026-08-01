@@ -1379,3 +1379,10 @@ button.danger:hover:not(:disabled) {
     align-items: center;
   }
 }
+
+/* 訊息區塊內若有多段文字，最後一段不留下方空白 */
+.notice > p:last-child,
+.error > p:last-child,
+.success > p:last-child {
+  margin-bottom: 0;
+}
