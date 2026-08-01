@@ -1252,3 +1252,59 @@ span.chip.is-on {
   margin: 0;
   font-size: 1rem;
 }
+
+/* ==========================================================================
+   我的優惠券
+   ========================================================================== */
+
+.coupon-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: 1fr;
+}
+
+.coupon-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.coupon-card h3 {
+  margin: 0;
+}
+
+/* 已使用或過期的券留著但降低存在感，仍看得到內容 */
+.coupon-card.is-inactive {
+  opacity: 0.62;
+}
+
+.coupon-value {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.coupon-terms {
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.coupon-card .btn {
+  margin-top: auto;
+  align-self: flex-start;
+}
+
+@media (min-width: 768px) {
+  .coupon-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .coupon-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

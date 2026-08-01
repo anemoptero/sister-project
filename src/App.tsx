@@ -11,6 +11,9 @@ import AdminProductsPage from './pages/admin/AdminProductsPage';
 import BookingPage from './pages/booking/BookingPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
+import MyAppointmentsPage from './pages/my/MyAppointmentsPage';
+import MyCouponsPage from './pages/my/MyCouponsPage';
+import MyOrdersPage from './pages/my/MyOrdersPage';
 import ProductsPage from './pages/ProductsPage';
 import NotFoundPage from './pages/NotFoundPage';
 import PlaceholderPage from './pages/PlaceholderPage';
@@ -68,18 +71,9 @@ export default function App() {
             {/* 需登入 */}
             <Route element={<RequireAuth />}>
               <Route path="/my/profile" element={<ProfilePage />} />
-              <Route
-                path="/my/appointments"
-                element={<PlaceholderPage title="我的預約" stage="E 段" />}
-              />
-              <Route
-                path="/my/orders"
-                element={<PlaceholderPage title="我的訂單" stage="E 段" />}
-              />
-              <Route
-                path="/my/coupons"
-                element={<PlaceholderPage title="我的優惠券" stage="E 段" />}
-              />
+              <Route path="/my/appointments" element={<MyAppointmentsPage />} />
+              <Route path="/my/orders" element={<MyOrdersPage />} />
+              <Route path="/my/coupons" element={<MyCouponsPage />} />
             </Route>
 
             {/* 需登入且已填電話 —— 少了電話，最後一步下單會被擋 */}
