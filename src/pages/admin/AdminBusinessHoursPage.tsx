@@ -16,6 +16,8 @@ const SLOT_STEP_OPTIONS = [5, 6, 10, 12, 15, 20, 30, 60];
 
 export default function AdminBusinessHoursPage() {
   const [hours, setHours] = useState<BusinessHours | null>(null);
+  /** 載入當下的容量，用來判斷使用者是否調降 */
+  const [savedResourceCount, setSavedResourceCount] = useState(0);
   const [configured, setConfigured] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -28,6 +30,7 @@ export default function AdminBusinessHoursPage() {
     try {
       const data = await callApi('adminGetBusinessHours', {});
       setHours(data.businessHours);
+      setSavedResourceCount(data.businessHours.resourceCount);
       setConfigured(data.businessHours.configured);
     } catch (err) {
       setLoadError(isApiError(err) ? err.message : '載入營業設定失敗。');
@@ -79,6 +82,7 @@ export default function AdminBusinessHoursPage() {
         maxAdvanceDays: hours.maxAdvanceDays
       });
       setHours(data.businessHours);
+      setSavedResourceCount(data.businessHours.resourceCount);
       setConfigured(true);
       setMessage('已儲存營業設定。');
     } catch (err) {
@@ -202,6 +206,15 @@ export default function AdminBusinessHoursPage() {
               aria-invalid={errorField === 'resourceCount'}
             />
             <p className="hint">同一個時間最多能同時服務幾位客人。1～20。</p>
+            {savedResourceCount > 0 && hours.resourceCount < savedResourceCount && (
+              <p className="notice">
+                ⚠️ 你正在把可接客數從 {savedResourceCount} 調降為 {hours.resourceCount}。
+                <strong>既有預約不會被重新檢查</strong>，同時段已經排了多位客人的話，
+                那些預約仍然存在。
+                <br />
+                另外，當初在較高容量下成立、之後被取消的預約，將無法再還原。
+              </p>
+            )}
           </div>
 
           <div className="field">
