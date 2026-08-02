@@ -1,19 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { callApi, isApiError } from '../../api/client';
-import { Modal } from '../../components/Modal';
 import { StatTile } from '../../components/StatTile';
 import type { AdminAppointment, AdminOrder, AppointmentStatus } from '../../types/models';
 import { formatDateTime, formatDuration, formatPrice } from '../../utils/format';
+import { CloseAppointmentModal, type CloseAction } from './CloseAppointmentModal';
 import { DateRangeFilter, defaultRange, type DateRange } from './DateRangeFilter';
 
 /**
  * 預約與訂單合併成同一頁。
  *
- * 兩者在這個系統裡是一對一的：`createOrder` 一次建立預約與訂單，訂單只是
- * 預約的金額面。分成兩頁會讓經營者為了「這筆多少錢、收了沒」在兩邊來回對照。
- *
- * 因此這頁同時取回兩份資料，以 `appointmentId` 合併成一列 ——
- * 時間、服務、金額、收款狀態、結案動作全部在同一行。
+ * 兩者在這個系統裡是一對一的（`createOrder` 一次建立兩者），訂單只是預約的
+ * 金額面。分成兩頁會讓經營者為了「這筆多少錢、收了沒」在兩邊來回對照。
  */
 
 type Tab = 'open' | 'done' | 'all';
@@ -31,7 +28,6 @@ const STATUS_LABELS: Record<AppointmentStatus, string> = {
   no_show: '未到'
 };
 
-/** 訂單狀態在這頁只關心「收了沒」 */
 function paymentLabel(order: AdminOrder | undefined): string {
   if (!order) return '—';
   switch (order.status) {
@@ -50,21 +46,32 @@ function paymentLabel(order: AdminOrder | undefined): string {
   }
 }
 
+/**
+ * 預約時間是否已經過去。
+ *
+ * 以**服務結束時間**判斷而非開始時間 —— 服務還在進行中就標記完成沒有意義。
+ */
+function isPast(appointment: AdminAppointment): boolean {
+  return new Date(appointment.endAt).getTime() < Date.now();
+}
+
 export default function AdminAppointmentsPage() {
   const [range, setRange] = useState<DateRange>(defaultRange());
   const [tab, setTab] = useState<Tab>('open');
   const [appointments, setAppointments] = useState<AdminAppointment[] | null>(null);
   const [ordersById, setOrdersById] = useState<Record<string, AdminOrder>>({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [closing, setClosing] = useState<AdminAppointment[] | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
   const [acting, setActing] = useState('');
-  const [closing, setClosing] = useState<AdminAppointment | null>(null);
 
   const load = useCallback(async () => {
     setError('');
     setAppointments(null);
+    setSelected(new Set());
 
-    // 兩份資料互不相依，平行取回。Apps Script 一次往返一到三秒，串行會很難等
     const [apptResult, orderResult] = await Promise.allSettled([
       callApi('adminListAppointments', { from: range.from, to: range.to, limit: 200 }),
       callApi('adminListOrders', { from: range.from, to: range.to, limit: 200 })
@@ -90,37 +97,52 @@ export default function AdminAppointmentsPage() {
     void load();
   }, [load]);
 
-  async function act(
-    appointment: AdminAppointment,
-    action: 'paid' | 'unpaid' | 'noShow' | 'cancel'
-  ) {
-    setActing(appointment.appointmentId);
+  /**
+   * 執行結案或取消。
+   *
+   * 後端一次只處理一筆，因此批次是逐筆送出。**逐筆記錄成敗**而不是
+   * 遇到第一個錯就整批中止 —— 中止會讓使用者不知道前面幾筆到底做了沒。
+   */
+  async function runAction(action: CloseAction, targets: AdminAppointment[]) {
+    setBusy(true);
     setError('');
     setMessage('');
 
-    try {
-      if (action === 'paid' || action === 'unpaid') {
-        await callApi('adminCompleteAppointment', {
-          appointmentId: appointment.appointmentId,
-          markPaid: action === 'paid'
-        });
-        setMessage(action === 'paid' ? '已標記完成並收款。' : '已標記完成，尚未收款。');
-      } else if (action === 'noShow') {
-        await callApi('adminSetAppointmentNoShow', {
-          appointmentId: appointment.appointmentId
-        });
-        setMessage('已標記未到，訂單已作廢。優惠券不會退回。');
-      } else {
-        await callApi('cancelAppointment', { appointmentId: appointment.appointmentId });
-        setMessage('已取消預約，時段已釋出，優惠券已退回顧客。');
+    let done = 0;
+    const failed: string[] = [];
+
+    for (const appointment of targets) {
+      // 尚未到預約時間的不可結案，但取消不受限制
+      if (action !== 'cancel' && !isPast(appointment)) continue;
+
+      try {
+        if (action === 'cancel') {
+          await callApi('cancelAppointment', { appointmentId: appointment.appointmentId });
+        } else if (action === 'noShow') {
+          await callApi('adminSetAppointmentNoShow', {
+            appointmentId: appointment.appointmentId
+          });
+        } else {
+          await callApi('adminCompleteAppointment', {
+            appointmentId: appointment.appointmentId,
+            markPaid: action === 'paid'
+          });
+        }
+        done++;
+      } catch (err) {
+        failed.push(isApiError(err) ? err.message : '未知錯誤');
       }
-      setClosing(null);
-      await load();
-    } catch (err) {
-      setError(isApiError(err) ? err.message : '操作失敗，請稍後再試。');
-    } finally {
-      setActing('');
     }
+
+    setClosing(null);
+    setBusy(false);
+
+    if (done > 0) setMessage(`已處理 ${done} 筆預約。`);
+    if (failed.length > 0) {
+      setError(`${failed.length} 筆處理失敗：${[...new Set(failed)].join('；')}`);
+    }
+
+    await load();
   }
 
   async function togglePaid(order: AdminOrder, paid: boolean) {
@@ -145,11 +167,24 @@ export default function AdminAppointmentsPage() {
     return true;
   });
 
-  // 未收款金額只看未取消的訂單，與統計頁的口徑一致
+  /** 只有未完成的可以被勾選 —— 其餘沒有可執行的動作 */
+  const selectable = visible.filter((a) => a.status === 'booked');
+  const selectedList = selectable.filter((a) => selected.has(a.appointmentId));
+  const allSelected = selectable.length > 0 && selectedList.length === selectable.length;
+
   const unpaid = all.reduce((sum, appointment) => {
     const order = ordersById[appointment.appointmentId];
     return order?.status === 'created' ? sum + order.finalAmount : sum;
   }, 0);
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   return (
     <div className="page">
@@ -165,7 +200,10 @@ export default function AdminAppointmentsPage() {
             role="tab"
             aria-selected={tab === value}
             className={`tab${tab === value ? ' is-active' : ''}`}
-            onClick={() => setTab(value)}
+            onClick={() => {
+              setTab(value);
+              setSelected(new Set());
+            }}
           >
             {TAB_LABELS[value]}
             {value !== 'all' && (
@@ -206,6 +244,22 @@ export default function AdminAppointmentsPage() {
           <table className="data-table">
             <thead>
               <tr>
+                <th>
+                  {selectable.length > 0 && (
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={() =>
+                        setSelected(
+                          allSelected
+                            ? new Set()
+                            : new Set(selectable.map((a) => a.appointmentId))
+                        )
+                      }
+                      aria-label="全選"
+                    />
+                  )}
+                </th>
                 <th>預約時間</th>
                 <th>服務內容</th>
                 <th>金額</th>
@@ -217,13 +271,27 @@ export default function AdminAppointmentsPage() {
             <tbody>
               {visible.map((appointment) => {
                 const order = ordersById[appointment.appointmentId];
-                const busy = acting === appointment.appointmentId || acting === order?.orderId;
                 const inactive =
                   appointment.status === 'cancelled' || appointment.status === 'no_show';
+                const canSelect = appointment.status === 'booked';
+                const past = isPast(appointment);
 
                 return (
                   <tr key={appointment.appointmentId} className={inactive ? 'row-disabled' : ''}>
-                    <td>{formatDateTime(appointment.startAt)}</td>
+                    <td>
+                      {canSelect && (
+                        <input
+                          type="checkbox"
+                          checked={selected.has(appointment.appointmentId)}
+                          onChange={() => toggle(appointment.appointmentId)}
+                          aria-label={`選取 ${formatDateTime(appointment.startAt)} 的預約`}
+                        />
+                      )}
+                    </td>
+                    <td>
+                      {formatDateTime(appointment.startAt)}
+                      {canSelect && !past && <div className="hint cell-sub">尚未開始</div>}
+                    </td>
                     <td>
                       {appointment.items.map((item) => item.productName).join('、') || '—'}
                       <div className="hint cell-sub">
@@ -232,38 +300,37 @@ export default function AdminAppointmentsPage() {
                     </td>
                     <td>{order ? formatPrice(order.finalAmount) : '—'}</td>
                     <td>
-                      <span
-                        className={`tag ${order?.status === 'paid' ? 'tag--on' : 'tag--off'}`}
-                      >
+                      <span className={`tag ${order?.status === 'paid' ? 'tag--on' : 'tag--off'}`}>
                         {paymentLabel(order)}
                       </span>
                     </td>
                     <td>
                       <span
-                        className={`tag ${appointment.status === 'completed' ? 'tag--on' : 'tag--off'}`}
+                        className={`tag ${
+                          appointment.status === 'completed' ? 'tag--on' : 'tag--off'
+                        }`}
                       >
                         {STATUS_LABELS[appointment.status]}
                       </span>
                     </td>
                     <td>
                       <div className="cell-actions">
-                        {appointment.status === 'booked' && (
+                        {canSelect && (
                           <button
                             type="button"
                             className="secondary small"
                             disabled={busy}
-                            onClick={() => setClosing(appointment)}
+                            onClick={() => setClosing([appointment])}
                           >
-                            結案
+                            處理
                           </button>
                         )}
 
-                        {/* 已完成但當時沒收到錢，事後補認列；誤按也能改回來 */}
                         {appointment.status === 'completed' && order?.status === 'created' && (
                           <button
                             type="button"
                             className="secondary small"
-                            disabled={busy}
+                            disabled={acting === order.orderId}
                             onClick={() => void togglePaid(order, true)}
                           >
                             認列收款
@@ -273,7 +340,7 @@ export default function AdminAppointmentsPage() {
                           <button
                             type="button"
                             className="secondary small"
-                            disabled={busy}
+                            disabled={acting === order.orderId}
                             onClick={() => void togglePaid(order, false)}
                           >
                             取消認列
@@ -290,72 +357,39 @@ export default function AdminAppointmentsPage() {
       )}
 
       <p className="hint">
-        已取消與已作廢的訂單不計入營收。改成公休不會自動取消既有預約，需在這裡逐筆處理。
+        只有已經過了服務時間的預約可以結案。<strong>取消不受此限制</strong> ——
+        忘記處理的無效預約會一直算在待收款裡，隨時都該能清掉。
       </p>
 
-      {closing && (
-        <Modal title="這筆預約要如何結案？" busy={Boolean(acting)} onClose={() => setClosing(null)}>
-          <p className="confirm-time">{formatDateTime(closing.startAt)}</p>
-          <p className="hint">
-            {closing.items.map((item) => item.productName).join('、')}
-            {ordersById[closing.appointmentId] &&
-              ` · ${formatPrice(ordersById[closing.appointmentId].finalAmount)}`}
-          </p>
-
-          {/* 三種結果的後果不同，一次列出來讓人選，而不是先做了再想怎麼救 */}
-          <div className="choice-list">
-            <button
-              type="button"
-              className="choice"
-              disabled={Boolean(acting)}
-              onClick={() => void act(closing, 'paid')}
-            >
-              <strong>完成並收款</strong>
-              <span className="hint">服務已完成，款項已收到。最常見的情況。</span>
+      {/* 有勾選時浮出批次操作列 */}
+      {selectedList.length > 0 && (
+        <div className="bulk-bar">
+          <span>已選取 {selectedList.length} 筆</span>
+          <div className="actions" style={{ marginTop: 0 }}>
+            <button type="button" onClick={() => setClosing(selectedList)} disabled={busy}>
+              批次處理
             </button>
-
-            <button
-              type="button"
-              className="choice"
-              disabled={Boolean(acting)}
-              onClick={() => void act(closing, 'unpaid')}
-            >
-              <strong>完成，稍後收款</strong>
-              <span className="hint">服務已完成但還沒收到錢，之後可在列表補認列。</span>
-            </button>
-
-            <button
-              type="button"
-              className="choice"
-              disabled={Boolean(acting)}
-              onClick={() => void act(closing, 'noShow')}
-            >
-              <strong>客人未到</strong>
-              <span className="hint">訂單作廢不計營收。時段不釋出，優惠券也不退回。</span>
-            </button>
-
-            <button
-              type="button"
-              className="choice choice--danger"
-              disabled={Boolean(acting)}
-              onClick={() => void act(closing, 'cancel')}
-            >
-              <strong>取消這筆預約</strong>
-              <span className="hint">時段釋出、優惠券退回顧客。適合事先告知的情況。</span>
-            </button>
-          </div>
-
-          <div className="actions">
             <button
               type="button"
               className="secondary"
-              onClick={() => setClosing(null)}
-              disabled={Boolean(acting)}
+              onClick={() => setSelected(new Set())}
+              disabled={busy}
             >
-              先不處理
+              取消選取
             </button>
           </div>
-        </Modal>
+        </div>
+      )}
+
+      {closing && (
+        <CloseAppointmentModal
+          targets={closing}
+          ordersById={ordersById}
+          futureCount={closing.filter((a) => !isPast(a)).length}
+          busy={busy}
+          onClose={() => setClosing(null)}
+          onConfirm={(action) => void runAction(action, closing)}
+        />
       )}
     </div>
   );
