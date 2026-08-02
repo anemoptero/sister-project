@@ -17,6 +17,7 @@ export default defineConfig({
     // require(ESM) 支援，本機為 20.11.1 會直接崩在載入階段。
     environment: 'happy-dom',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    setupFiles: ['src/test/setup.ts'],
     env: {
       // 測試不打真的網路，但 client 會在網址為空時提早拋錯，
       // 所以給一個假網址讓流程能走到 fetch（fetch 本身被 mock）
