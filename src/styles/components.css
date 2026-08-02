@@ -1723,3 +1723,62 @@ button.danger:hover:not(:disabled) {
 .data-table input[type='checkbox'] {
   width: auto;
 }
+
+/* ==========================================================================
+   首頁與品牌
+   ========================================================================== */
+
+.app-logo {
+  height: 32px;
+  width: auto;
+  display: block;
+}
+
+.hero {
+  padding: var(--space-6) 0 var(--space-7);
+}
+
+.hero h1 {
+  font-size: 2rem;
+  margin-bottom: var(--space-3);
+}
+
+.hero-tagline {
+  font-size: 1.15rem;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.hero-desc {
+  color: var(--color-text-muted);
+  max-width: 52ch;
+}
+
+/* 營業說明常會分行寫，保留換行但仍自動換列 */
+.preserve-lines {
+  white-space: pre-wrap;
+}
+
+.contact-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.contact-list dt {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  letter-spacing: var(--tracking-wide);
+}
+
+.contact-list dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+@media (min-width: 768px) {
+  .hero h1 {
+    font-size: 2.5rem;
+  }
+}

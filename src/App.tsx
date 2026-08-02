@@ -3,8 +3,8 @@ import { AuthProvider } from './auth/AuthProvider';
 import { AdminLayout } from './components/AdminLayout';
 import { Layout } from './components/Layout';
 import { RequireAdmin, RequireAuth, RequireProfile } from './components/RouteGuards';
-import { AppearanceProvider } from './theme/AppearanceProvider';
-import AdminAppearancePage from './pages/admin/AdminAppearancePage';
+import { SiteProvider } from './site/SiteProvider';
+import AdminSitePage from './pages/admin/AdminSitePage';
 import AdminBusinessHoursPage from './pages/admin/AdminBusinessHoursPage';
 import AdminAppointmentsPage from './pages/admin/AdminAppointmentsPage';
 import AdminCouponsPage from './pages/admin/AdminCouponsPage';
@@ -33,7 +33,7 @@ import ProfilePage from './pages/ProfilePage';
  */
 export default function App() {
   return (
-    <AppearanceProvider>
+    <SiteProvider>
       <AuthProvider>
         <HashRouter>
         <Routes>
@@ -49,7 +49,8 @@ export default function App() {
               <Route path="/admin/orders" element={<Navigate to="/admin/appointments" replace />} />
               <Route path="/admin/appointments" element={<AdminAppointmentsPage />} />
               <Route path="/admin/stats" element={<AdminStatsPage />} />
-              <Route path="/admin/appearance" element={<AdminAppearancePage />} />
+              <Route path="/admin/site" element={<AdminSitePage />} />
+              <Route path="/admin/appearance" element={<Navigate to="/admin/site" replace />} />
             </Route>
           </Route>
 
@@ -81,6 +82,6 @@ export default function App() {
           </Routes>
         </HashRouter>
       </AuthProvider>
-    </AppearanceProvider>
+    </SiteProvider>
   );
 }

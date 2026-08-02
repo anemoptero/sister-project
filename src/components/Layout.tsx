@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
+import { useSite } from '../site/useSite';
 
 /**
  * 前台外框。
@@ -12,12 +13,18 @@ import { useAuth } from '../auth/useAuth';
  */
 export function Layout() {
   const { isLoggedIn, isAdmin, user, signOut } = useAuth();
+  const { site } = useSite();
 
   return (
     <div className="app-shell">
       <header className="app-header">
         <NavLink to="/" className="app-brand">
-          預約系統
+          {/* 有 Logo 就用圖，沒有就顯示店名文字 */}
+          {site.logoUrl ? (
+            <img src={site.logoUrl} alt={site.siteName} className="app-logo" />
+          ) : (
+            site.siteName
+          )}
         </NavLink>
 
         <nav className="app-nav">

@@ -208,6 +208,35 @@ export interface ApiActionMap {
     };
   };
 
+  /**
+   * 網站設定的公開讀取。訪客也要看得到店名與介紹。
+   *
+   * ⚠️ 後端走白名單輸出，不是整份文件 —— 新增欄位時後端也要同步加進白名單，
+   * 否則這裡宣告了也拿不到值。
+   */
+  getSiteSettings: {
+    payload: Record<string, never>;
+    data: {
+      site: {
+        siteName: string;
+        logoUrl: string;
+        tagline: string;
+        description: string;
+        contactPhone: string;
+        contactAddress: string;
+        lineUrl: string;
+        businessNote: string;
+        theme: 'sand' | 'mono' | 'sage' | 'night';
+        backgroundType: 'none' | 'image' | 'gradient';
+        backgroundImageUrl: string;
+        backgroundGradient: string;
+        backgroundOverlay: number;
+        /** false 表示從未設定過，回傳的是預設值 */
+        configured: boolean;
+      };
+    };
+  };
+
   // --- 公開，但行為隨身分改變 ---
   listProducts: {
     /** 非 admin 傳 includeDisabled 會被靜默忽略，不報錯 */
@@ -570,6 +599,12 @@ export interface ApiActionMap {
     };
     data: { uid: string; updated: boolean };
   };
+  /** 部分更新。圖片與連結允許空字串（清除），有值則必須是 https */
+  adminUpdateSiteSettings: {
+    payload: Partial<Omit<ApiActionMap['getSiteSettings']['data']['site'], 'configured'>>;
+    data: ApiActionMap['getSiteSettings']['data'];
+  };
+
   adminSetUserRole: {
     payload: { uid: string; role: UserRole };
     data: { uid: string; role: UserRole; changed: boolean };

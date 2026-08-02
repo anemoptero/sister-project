@@ -28,7 +28,7 @@ export function AdminLayout() {
           <NavLink to="/admin/appointments">預約與訂單</NavLink>
           <NavLink to="/admin/customers">會員</NavLink>
           <NavLink to="/admin/stats">統計</NavLink>
-          <NavLink to="/admin/appearance">外觀</NavLink>
+          <NavLink to="/admin/site">網站設定</NavLink>
         </nav>
 
         <div className="app-account">
