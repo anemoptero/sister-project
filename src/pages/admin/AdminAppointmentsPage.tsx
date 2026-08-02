@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { callApi, isApiError } from '../../api/client';
+import { Modal } from '../../components/Modal';
 import { StatTile } from '../../components/StatTile';
 import type { AdminAppointment, AdminOrder, AppointmentStatus } from '../../types/models';
 import { formatDateTime, formatDuration, formatPrice } from '../../utils/format';
@@ -66,6 +67,8 @@ export default function AdminAppointmentsPage() {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [acting, setActing] = useState('');
+  /** 待確認退回的預約。結案後帳目就變了，退回一樣要確認 */
+  const [reopening, setReopening] = useState<AdminAppointment | null>(null);
 
   const load = useCallback(async () => {
     setError('');
@@ -143,6 +146,30 @@ export default function AdminAppointmentsPage() {
     }
 
     await load();
+  }
+
+  /**
+   * 取消結案，退回未完成。
+   *
+   * 只有已完成與未到可以退回 —— 已取消的時段已經釋出，可能已被別人預約，
+   * 硬退回會產生重疊。後端會擋，這裡也不顯示按鈕。
+   */
+  async function reopen(appointment: AdminAppointment) {
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      await callApi('adminReopenAppointment', {
+        appointmentId: appointment.appointmentId
+      });
+      setMessage('已退回未完成，訂單也回到未收款。');
+      setReopening(null);
+      await load();
+    } catch (err) {
+      setError(isApiError(err) ? err.message : '退回失敗，請稍後再試。');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function togglePaid(order: AdminOrder, paid: boolean) {
@@ -346,6 +373,19 @@ export default function AdminAppointmentsPage() {
                             取消認列
                           </button>
                         )}
+
+                        {/* 誤按結案的復原路徑。已取消的不提供 —— 時段已釋出 */}
+                        {(appointment.status === 'completed' ||
+                          appointment.status === 'no_show') && (
+                          <button
+                            type="button"
+                            className="ghost small"
+                            disabled={busy}
+                            onClick={() => setReopening(appointment)}
+                          >
+                            退回未完成
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -379,6 +419,32 @@ export default function AdminAppointmentsPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {reopening && (
+        <Modal title="要把這筆預約退回未完成嗎？" busy={busy} onClose={() => setReopening(null)}>
+          <p className="confirm-time">{formatDateTime(reopening.startAt)}</p>
+          <p>
+            預約會回到「未完成」，訂單退回<strong>未收款</strong>，
+            這筆金額也會從已收改回未收。
+          </p>
+          <p className="hint">
+            時段與優惠券不受影響 —— 結案本來就沒有釋出時段，也沒有歸還券。
+          </p>
+          <div className="actions">
+            <button type="button" disabled={busy} onClick={() => void reopen(reopening)}>
+              {busy ? '處理中…' : '確定退回'}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={() => setReopening(null)}
+            >
+              保持現狀
+            </button>
+          </div>
+        </Modal>
       )}
 
       {closing && (

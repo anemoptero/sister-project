@@ -520,6 +520,18 @@ export interface ApiActionMap {
     payload: { orderId: string; paid: boolean };
     data: { orderId: string; status: 'paid' | 'created'; changed: boolean };
   };
+
+  /**
+   * 取消結案，把預約退回未完成。人為操作必然有失誤，需要復原路徑。
+   *
+   * ⚠️ **已取消的預約不可退回** —— 取消會把區間從 `bookingDays` 移除，
+   * 那個時段可能已被其他顧客預約走了，硬退回會產生重疊。
+   * 完成與未到都不釋放時段，因此可以安全退回。
+   */
+  adminReopenAppointment: {
+    payload: { appointmentId: string };
+    data: { appointmentId: string; status: 'booked'; orderStatus: string };
+  };
   adminListCustomers: {
     payload: PagedPayload & {
       keyword?: string;
