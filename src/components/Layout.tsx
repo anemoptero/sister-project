@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { useSite } from '../site/useSite';
+import { Footer } from './Footer';
 
 /**
  * 前台外框。
@@ -44,12 +45,15 @@ export function Layout() {
           {isLoggedIn ? (
             <>
               <span className="app-username">{user?.displayName || '會員'}</span>
-              <button type="button" onClick={() => void signOut()}>
+              {/* 登出用 ghost：視覺重點應該在預約，不是離開 */}
+              <button type="button" className="ghost" onClick={() => void signOut()}>
                 登出
               </button>
             </>
           ) : (
-            <NavLink to="/login">登入</NavLink>
+            <NavLink to="/login" className="btn">
+              登入
+            </NavLink>
           )}
         </div>
       </header>
@@ -57,6 +61,8 @@ export function Layout() {
       <main>
         <Outlet />
       </main>
+
+      <Footer />
     </div>
   );
 }

@@ -1782,3 +1782,134 @@ button.danger:hover:not(:disabled) {
     font-size: 2.5rem;
   }
 }
+
+/* ==========================================================================
+   首頁主視覺
+   ========================================================================== */
+
+.home {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 滿版底色，與下方內容區隔開，畫面才不會從頭到尾都是同一片白 */
+.hero {
+  background: var(--color-surface-alt);
+  border-bottom: var(--border-width) solid var(--color-border);
+  padding: var(--space-7) var(--space-4);
+}
+
+.hero-inner {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  /* 文字量少時置中比靠左耐看；大螢幕靠左會顯得整片空曠 */
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: var(--tracking-tight);
+}
+
+.hero-tagline {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.hero-desc {
+  margin: 0;
+  color: var(--color-text-muted);
+  /* 一行不超過 40 個中文字，超過就不好讀 */
+  max-width: 40ch;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: center;
+  margin-top: var(--space-2);
+}
+
+.home-section {
+  margin-bottom: var(--space-7);
+}
+
+.home-section > h2 {
+  margin-bottom: var(--space-4);
+}
+
+.product-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+/* ==========================================================================
+   頁尾
+   ========================================================================== */
+
+.app-footer {
+  margin-top: auto;
+  padding: var(--space-6) var(--space-4);
+  background: var(--color-surface);
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.app-footer-inner {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  justify-content: space-between;
+}
+
+.app-footer p {
+  margin: var(--space-1) 0 0;
+}
+
+.app-footer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.app-footer-nav a {
+  font-size: 0.9rem;
+  text-decoration: none;
+  color: var(--color-text-muted);
+}
+
+.app-footer-nav a:hover {
+  color: var(--color-text);
+}
+
+@media (min-width: 768px) {
+  .hero {
+    padding: var(--space-7) var(--space-5);
+  }
+
+  .hero h1 {
+    font-size: 2.75rem;
+  }
+
+  .app-footer-inner {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+}
+
+/* 內容區撐開，頁尾才會貼在視窗底部而不是浮在半空中 */
+.app-shell > main {
+  flex: 1;
+}
