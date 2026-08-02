@@ -344,11 +344,25 @@ export interface SalesStatsBucket {
   newCustomerCount: number;
 }
 
+/**
+ * 產品維度的銷售統計。
+ *
+ * ⚠️ 欄位名稱必須與 `admin.js` 的 `buildProductStats_` 一致。
+ * 這裡曾經憑 API 文件想像成 `quantity` / `totalSales`，實際卻是
+ * `count` / `revenue` —— 前端讀到 undefined，`formatPrice` 直接讓整頁白畫面。
+ * 新增欄位時請回頭核對實作，不要只看文件。
+ */
 export interface ProductStats {
   productId: string;
   productName: string;
-  quantity: number;
-  totalSales: number;
+  /** 售出次數（品項數，不是訂單數） */
+  count: number;
+  /** 原價小計 */
+  originalAmount: number;
+  /** 折抵合計。**已包含整單券按比例攤到這項的部分** */
+  discountAmount: number;
+  /** 實收：原價扣掉品項折抵與攤到的整單折抵 */
+  revenue: number;
 }
 
 export interface AdminCustomer {

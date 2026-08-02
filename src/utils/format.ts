@@ -5,7 +5,19 @@
  * （`docs/AGENT_GUIDE.md` §8.3），所以這裡也不做小數處理。
  */
 
+/**
+ * 金額顯示。
+ *
+ * 收到非數字時回傳「—」而不是拋錯或顯示 0。
+ *
+ * 兩者都不行的理由不同：拋錯會讓整頁白畫面（實際發生過 —— 後端欄位叫
+ * `revenue`、前端型別誤寫成 `totalSales`，統計頁整個掛掉）；顯示 0 則更糟，
+ * 那是把「沒有資料」謊報成「金額為零」，經營者看不出哪裡不對。
+ *
+ * 「—」讓缺漏看得見，但不會拖垮整個畫面。
+ */
 export function formatPrice(amount: number): string {
+  if (!Number.isFinite(amount)) return '—';
   return `NT$ ${amount.toLocaleString('zh-TW')}`;
 }
 

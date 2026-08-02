@@ -167,19 +167,24 @@ export default function AdminStatsPage() {
             ) : (
               <div className="hbar-list">
                 {stats.byProduct.map((product) => {
-                  const max = Math.max(...stats.byProduct.map((p) => p.totalSales), 1);
+                  const max = Math.max(...stats.byProduct.map((p) => p.revenue), 1);
                   return (
                     <div className="hbar-row" key={product.productId}>
                       <span className="hbar-label">{product.productName}</span>
                       <span className="hbar-track">
                         <span
                           className="hbar-fill"
-                          style={{ width: `${(product.totalSales / max) * 100}%` }}
+                          style={{ width: `${(product.revenue / max) * 100}%` }}
                         />
                       </span>
                       <span className="hbar-value">
-                        {formatPrice(product.totalSales)}
-                        <span className="hint"> · {product.quantity} 次</span>
+                        {formatPrice(product.revenue)}
+                        <span className="hint">
+                          {' · '}
+                          {product.count} 次
+                          {product.discountAmount > 0 &&
+                            `，折抵 ${formatPrice(product.discountAmount)}`}
+                        </span>
                       </span>
                     </div>
                   );
@@ -188,8 +193,8 @@ export default function AdminStatsPage() {
             )}
 
             <p className="hint">
-              產品維度的數字來自訂單品項，加總後<strong>不會等於上方的銷售額</strong> ——
-              整筆訂單的折抵沒有攤到個別品項上。
+              實收金額 —— 整筆訂單的折抵已按各品項金額比例攤入，
+              零頭補給金額最大的那一項。因此這裡的加總會等於上方的應收。
             </p>
           </section>
 
