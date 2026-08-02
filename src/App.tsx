@@ -10,7 +10,6 @@ import AdminAppointmentsPage from './pages/admin/AdminAppointmentsPage';
 import AdminCouponsPage from './pages/admin/AdminCouponsPage';
 import AdminHomePage from './pages/admin/AdminHomePage';
 import AdminCustomersPage from './pages/admin/AdminCustomersPage';
-import AdminOrdersPage from './pages/admin/AdminOrdersPage';
 import AdminStatsPage from './pages/admin/AdminStatsPage';
 import AdminProductsPage from './pages/admin/AdminProductsPage';
 import BookingPage from './pages/booking/BookingPage';
@@ -46,7 +45,8 @@ export default function App() {
               <Route path="/admin/business-hours" element={<AdminBusinessHoursPage />} />
               <Route path="/admin/coupons" element={<AdminCouponsPage />} />
               <Route path="/admin/customers" element={<AdminCustomersPage />} />
-              <Route path="/admin/orders" element={<AdminOrdersPage />} />
+              {/* 訂單已併入預約頁 —— 兩者一對一，分開會讓人為了「這筆多少錢、收了沒」兩邊對照 */}
+              <Route path="/admin/orders" element={<Navigate to="/admin/appointments" replace />} />
               <Route path="/admin/appointments" element={<AdminAppointmentsPage />} />
               <Route path="/admin/stats" element={<AdminStatsPage />} />
               <Route path="/admin/appearance" element={<AdminAppearancePage />} />

@@ -470,7 +470,12 @@ export interface ApiActionMap {
       range: { from: string; to: string };
       groupBy: StatsGroupBy;
       summary: {
+        /** 應收：待付款 + 免付款 + 已付款 */
         totalSales: number;
+        /** 已收：狀態為 paid */
+        paidSales: number;
+        /** 未收：狀態為 created */
+        unpaidSales: number;
         orderCount: number;
         appointmentCount: number;
         newCustomerCount: number;
@@ -488,6 +493,32 @@ export interface ApiActionMap {
   adminListAppointments: {
     payload: Partial<DateRangePayload> & PagedPayload & { status?: string };
     data: PagedData & { appointments: AdminAppointment[] };
+  };
+
+  /**
+   * 標記完成並認列收款。第一階段沒有金流串接，付款一律手動認列。
+   *
+   * `markPaid` 預設 true。設為 false 用於「已完成但還沒收到錢」，
+   * 之後再用 `adminSetOrderPaid` 補認列。
+   */
+  adminCompleteAppointment: {
+    payload: { appointmentId: string; markPaid?: boolean };
+    data: { appointmentId: string; status: 'completed'; orderStatus: string };
+  };
+
+  /**
+   * 標記未到。與取消是刻意區分的兩種處理：
+   * 取消會釋出時段並歸還優惠券，未到兩者都不做，訂單改為 `void`。
+   */
+  adminSetAppointmentNoShow: {
+    payload: { appointmentId: string };
+    data: { appointmentId: string; status: 'no_show' };
+  };
+
+  /** 單獨調整收款狀態。`free`（全額折抵）不可標記，金額為 0 沒有收款這回事 */
+  adminSetOrderPaid: {
+    payload: { orderId: string; paid: boolean };
+    data: { orderId: string; status: 'paid' | 'created'; changed: boolean };
   };
   adminListCustomers: {
     payload: PagedPayload & {

@@ -1605,3 +1605,89 @@ button.danger:hover:not(:disabled) {
   flex-direction: column;
   gap: 2px;
 }
+
+/* ==========================================================================
+   金額三數並列
+   ========================================================================== */
+
+/* 未收 + 已收 = 應收。把運算子畫出來，關係就不需要文字解釋 */
+.money-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.money-op {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.stat-tile--strong {
+  border-color: var(--color-primary);
+}
+
+.stat-tile--strong .stat-value {
+  color: var(--color-primary);
+}
+
+/* 分頁標題旁的筆數 */
+.tab-count {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tab.is-active .tab-count {
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+}
+
+/* 結案選項：每個結果的後果都寫出來，不是先做了再想怎麼救 */
+.choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: var(--border-width) solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 400;
+}
+
+.choice:hover:not(:disabled) {
+  background: var(--color-surface-alt);
+  border-color: var(--color-primary);
+}
+
+.choice--danger:hover:not(:disabled) {
+  border-color: var(--color-danger);
+}
+
+.choice--danger strong {
+  color: var(--color-danger);
+}
+
+@media (max-width: 767px) {
+  /* 手機上直向排列，運算子轉為置中的一行 */
+  .money-row {
+    grid-template-columns: 1fr;
+  }
+}

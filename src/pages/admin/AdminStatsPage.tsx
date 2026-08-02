@@ -5,7 +5,7 @@ import type { ApiDataOf } from '../../types/api';
 import type { StatsGroupBy } from '../../types/models';
 import { formatPrice } from '../../utils/format';
 import { DateRangeFilter, defaultRange, type DateRange } from './DateRangeFilter';
-import { StatTile } from './AdminOrdersPage';
+import { StatTile } from '../../components/StatTile';
 
 type Stats = ApiDataOf<'adminGetSalesStats'>;
 
@@ -82,23 +82,48 @@ export default function AdminStatsPage() {
             </p>
           )}
 
+          {/* 三個金額並列，關係一眼看得出來，不需要另外解釋公式 */}
+          <div className="money-row">
+            <StatTile
+              label="未收"
+              value={formatPrice(stats.summary.unpaidSales)}
+              hint="已預約，尚未收款"
+            />
+            <span className="money-op" aria-hidden="true">
+              +
+            </span>
+            <StatTile
+              label="已收"
+              value={formatPrice(stats.summary.paidSales)}
+              hint="已完成並收款"
+            />
+            <span className="money-op" aria-hidden="true">
+              =
+            </span>
+            <StatTile
+              label="應收"
+              value={formatPrice(stats.summary.totalSales)}
+              hint="不含取消與未到"
+              tone="strong"
+            />
+          </div>
+
           <div className="stat-row">
-            <StatTile label="銷售額" value={formatPrice(stats.summary.totalSales)} />
             <StatTile label="訂單數" value={String(stats.summary.orderCount)} />
             <StatTile label="預約數" value={String(stats.summary.appointmentCount)} />
             <StatTile label="新客數" value={String(stats.summary.newCustomerCount)} />
           </div>
 
           <section className="card">
-            <h2>{GROUP_LABELS[groupBy]}銷售額</h2>
+            <h2>{GROUP_LABELS[groupBy]}應收金額</h2>
             <BarChart
               data={stats.items.map((item) => ({
                 label: item.label,
                 value: item.totalSales,
-                detail: `${item.orderCount} 筆訂單，${item.newCustomerCount} 位新客`
+                detail: `已收 ${formatPrice(item.paidSales)}，${item.orderCount} 筆訂單`
               }))}
               format={formatPrice}
-              caption={`${GROUP_LABELS[groupBy]}銷售額，已排除取消與作廢的訂單`}
+              caption={`${GROUP_LABELS[groupBy]}應收金額，已排除取消與未到的訂單`}
             />
           </section>
 
@@ -109,7 +134,9 @@ export default function AdminStatsPage() {
                 <thead>
                   <tr>
                     <th>期間</th>
-                    <th>銷售額</th>
+                    <th>未收</th>
+                    <th>已收</th>
+                    <th>應收</th>
                     <th>訂單數</th>
                     <th>預約數</th>
                     <th>新客數</th>
@@ -119,6 +146,8 @@ export default function AdminStatsPage() {
                   {stats.items.map((item) => (
                     <tr key={item.label}>
                       <td>{item.label}</td>
+                      <td>{formatPrice(item.unpaidSales)}</td>
+                      <td>{formatPrice(item.paidSales)}</td>
                       <td>{formatPrice(item.totalSales)}</td>
                       <td>{item.orderCount}</td>
                       <td>{item.appointmentCount}</td>
@@ -166,7 +195,7 @@ export default function AdminStatsPage() {
 
           <p className="hint">
             新客數以「帳號建立時間」落在區間內計算，不是「該區間第一次消費的人」。
-            銷售額已排除取消與作廢的訂單。
+            已取消與標記未到的訂單不計入任何一項金額。
           </p>
         </>
       )}

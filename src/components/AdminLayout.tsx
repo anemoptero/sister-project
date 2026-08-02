@@ -25,8 +25,7 @@ export function AdminLayout() {
           <NavLink to="/admin/products">產品</NavLink>
           <NavLink to="/admin/business-hours">營業時間</NavLink>
           <NavLink to="/admin/coupons">優惠券</NavLink>
-          <NavLink to="/admin/appointments">預約</NavLink>
-          <NavLink to="/admin/orders">訂單</NavLink>
+          <NavLink to="/admin/appointments">預約與訂單</NavLink>
           <NavLink to="/admin/customers">會員</NavLink>
           <NavLink to="/admin/stats">統計</NavLink>
           <NavLink to="/admin/appearance">外觀</NavLink>

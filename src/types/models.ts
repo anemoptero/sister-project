@@ -325,9 +325,20 @@ export interface Grant {
 
 export type StatsGroupBy = 'day' | 'week' | 'month';
 
+/**
+ * 營收拆成三個數字，讓「未收 + 已收 = 應收」的關係在畫面上自明。
+ *
+ * `free`（全額折抵）金額必為 0，只計入應收而不分配到未收或已收，
+ * 等式仍然成立。已取消與已作廢都不計入任何一項。
+ */
 export interface SalesStatsBucket {
-  label: string;
+  /** 應收：待付款 + 免付款 + 已付款 */
   totalSales: number;
+  /** 已收：狀態為 paid */
+  paidSales: number;
+  /** 未收：狀態為 created */
+  unpaidSales: number;
+  label: string;
   orderCount: number;
   appointmentCount: number;
   newCustomerCount: number;
