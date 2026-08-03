@@ -40,6 +40,7 @@ function coupon(patch: Partial<MyCoupon> = {}): MyCoupon {
     expiresAt: '',
     usedAt: '',
     revokedAt: '',
+    validityState: 'ok',
     usable: true,
     ...patch
   };

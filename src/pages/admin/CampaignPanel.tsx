@@ -21,6 +21,15 @@ const GRANT_TYPE_LABELS: Record<CouponGrantType, string> = {
 /** 後端上限 400（Firestore 單次 commit 500 個寫入，留給活動計數與餘裕） */
 const MAX_BATCH = 400;
 
+/**
+ * 領取連結。用的是 HashRouter，`pathname` 固定停在部署的 base path，
+ * 因此可以直接接上 hash 路由。
+ */
+function claimLink(token: string): string {
+  const { origin, pathname } = window.location;
+  return `${origin}${pathname}#/claim/${encodeURIComponent(token)}`;
+}
+
 export function CampaignPanel({ coupons }: { coupons: Coupon[] }) {
   const [searchParams] = useSearchParams();
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
@@ -139,7 +148,11 @@ export function CampaignPanel({ coupons }: { coupons: Coupon[] }) {
                   <td>
                     {campaign.name}
                     {campaign.claimToken && (
-                      <div className="hint cell-sub">領取碼：{campaign.claimToken}</div>
+                      <>
+                        <div className="hint cell-sub">領取碼：{campaign.claimToken}</div>
+                        {/* 直接給可分享的網址，顧客點開登入後就能領 */}
+                        <div className="hint cell-sub">{claimLink(campaign.claimToken)}</div>
+                      </>
                     )}
                   </td>
                   <td>{couponName(campaign.couponId)}</td>
@@ -648,13 +661,16 @@ function CampaignForm({
                 </thead>
                 <tbody>
                   {grants.map((grant) => {
+                    // 有效期狀態一律用後端的 validityState，不自行比對 expiresAt
                     const status = grant.revokedAt
                       ? '已收回'
                       : grant.usedAt
                         ? '已使用'
-                        : new Date(grant.expiresAt).getTime() < Date.now()
-                          ? '已過期'
-                          : '可使用';
+                        : grant.validityState === 'not_started'
+                          ? '尚未開始'
+                          : grant.validityState === 'ok'
+                            ? '可使用'
+                            : '已過期';
 
                     return (
                       <tr key={grant.grantId} className={grant.revokedAt ? 'row-disabled' : ''}>

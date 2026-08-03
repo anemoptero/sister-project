@@ -56,6 +56,9 @@ export default function MyCouponsPage() {
           <h2>{includeHistory ? '沒有任何優惠券紀錄' : '目前沒有可用的優惠券'}</h2>
           <p>優惠券由店家發放，收到後會出現在這裡。</p>
           <p className="hint">
+            有領取碼？<Link to="/claim">在這裡領取</Link>
+          </p>
+          <p className="hint">
             <Link to="/products">先看看有哪些療程</Link>
           </p>
         </div>
@@ -120,8 +123,10 @@ export default function MyCouponsPage() {
 function describeStatus(coupon: MyCoupon): string {
   if (coupon.revokedAt) return '已收回';
   if (coupon.usedAt) return '已使用';
-  // usable 由後端綜合判斷（券已停用、過期、已用皆為 false），
-  // 前端不重算，只在這裡補上「過期」這個最常見的原因
+  // validityState 與結帳走同一份判定，前端不重算 ——
+  // absolute 型的有效期在券上，用 expiresAt 自行比對會與結帳結果不一致
+  if (coupon.validityState === 'not_started') return '尚未開始';
+  if (coupon.validityState === 'expired' || coupon.validityState === 'invalid') return '已過期';
   if (!coupon.usable) return '無法使用';
   return '可使用';
 }

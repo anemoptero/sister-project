@@ -2,14 +2,14 @@
  * API 信封格式與 action 對應表。
  *
  * 對應文件：
- *   docs/API_SPEC.md §3 Request Schema、§4 Response Schema、§5 Error Code、§11 權限表
+ *   docs/API_SPEC.md §3 Request Schema、§4 Response Schema、§5 Error Code、§12 權限表
  *
  * `ApiActionMap` 是本檔的核心：把每個 action 對應到它的 payload 與 data 型別，
  * `callApi('listProducts', {})` 就能自動推導出回傳是 `{ products: Product[] }`。
  * 打錯 action 名稱、payload 缺欄位、把回傳當成別的形狀用，都會在 `tsc` 階段擋下。
  *
  * ⚠️ 新增 API 時必須同步四個地方：`src/router.js` 的 `getRoutes_()`、
- * `API_SPEC.md` §11 權限表、本檔的 `ApiActionMap`，以及對應的 handler。
+ * `API_SPEC.md` §12 權限表、本檔的 `ApiActionMap`，以及對應的 handler。
  */
 
 import type {
@@ -135,6 +135,28 @@ export interface SlotUnavailableDetails {
   occupiedEndAt: string;
   /** 是哪一格衝突 */
   conflictSlotStartAt: string;
+}
+
+/**
+ * `SLOT_UNAVAILABLE` 在「還原已取消預約」時的 details。
+ *
+ * 與 `SlotUnavailableDetails` 是同一個錯誤碼的另一種形狀：這裡沒有
+ * `conflictSlotStartAt`，改帶 `conflicts` 指出被誰擋住，管理員才能去協調改期。
+ */
+export interface ReopenConflictDetails {
+  reason: string;
+  requestedStartAt: string;
+  occupiedEndAt: string;
+  /** 當前設定值，不是預約成立當時的值 */
+  resourceCount: number;
+  conflicts: {
+    appointmentId: string;
+    uid: string;
+    startAt: string;
+    endAt: string;
+    /** 姓名（電話），查不到時退回 uid */
+    customer: string;
+  }[];
 }
 
 /** `VALIDATION_ERROR` 的 details，指出是哪個欄位 */
@@ -553,13 +575,20 @@ export interface ApiActionMap {
   /**
    * 取消結案，把預約退回未完成。人為操作必然有失誤，需要復原路徑。
    *
-   * ⚠️ **已取消的預約不可退回** —— 取消會把區間從 `bookingDays` 移除，
-   * 那個時段可能已被其他顧客預約走了，硬退回會產生重疊。
-   * 完成與未到都不釋放時段，因此可以安全退回。
+   * 完成、未到、已取消三種都可退回。前兩者不釋放時段，直接改狀態；
+   * 已取消的時段已經釋出，後端會重新確認沒被佔走並把優惠券扣回，
+   * 佔用中則回 `SLOT_UNAVAILABLE`，details 帶 `conflicts` 指出被誰擋住。
+   *
+   * `restoredCoupons` 只在還原已取消的預約時有值。
    */
   adminReopenAppointment: {
     payload: { appointmentId: string };
-    data: { appointmentId: string; status: 'booked'; orderStatus: string };
+    data: {
+      appointmentId: string;
+      status: 'booked';
+      orderStatus: string;
+      restoredCoupons?: string[];
+    };
   };
   adminListCustomers: {
     payload: PagedPayload & {

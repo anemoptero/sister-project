@@ -13,6 +13,7 @@ import AdminCustomersPage from './pages/admin/AdminCustomersPage';
 import AdminStatsPage from './pages/admin/AdminStatsPage';
 import AdminProductsPage from './pages/admin/AdminProductsPage';
 import BookingPage from './pages/booking/BookingPage';
+import ClaimCouponPage from './pages/my/ClaimCouponPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import MyAppointmentsPage from './pages/my/MyAppointmentsPage';
@@ -67,6 +68,12 @@ export default function App() {
               <Route path="/my/appointments" element={<MyAppointmentsPage />} />
               <Route path="/my/orders" element={<MyOrdersPage />} />
               <Route path="/my/coupons" element={<MyCouponsPage />} />
+              {/*
+                領取碼放在網址上，店家把 #/claim/XXXX 直接分享出去即可。
+                未登入時 RequireAuth 會先導去登入，登入後回到這裡繼續領取。
+              */}
+              <Route path="/claim" element={<ClaimCouponPage />} />
+              <Route path="/claim/:token" element={<ClaimCouponPage />} />
             </Route>
 
             {/* 需登入且已填電話 —— 少了電話，最後一步下單會被擋 */}

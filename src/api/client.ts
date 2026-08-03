@@ -16,6 +16,7 @@ import {
   type ApiPayloadOf,
   type ApiResponse,
   type ProductChangedDetails,
+  type ReopenConflictDetails,
   type SlotUnavailableDetails,
   type ValidationErrorDetails
 } from '../types/api';
@@ -110,10 +111,33 @@ export function productChangedDetails(err: ApiError): ProductChangedDetails | nu
  * 取出 `SLOT_UNAVAILABLE` 的衝突時段。
  * `err.message` 本身已含時間（「16:00 這個時段已額滿」），可直接顯示；
  * 這裡的 `conflictSlotStartAt` 用於標記日曆上的哪一格。
+ *
+ * ⚠️ 後端有九個地方拋 `SLOT_UNAVAILABLE`（公休、超出提前預約範圍、
+ * 非格線整點…），只有「時段已額滿」這一種帶 `reason: 'SLOT_TAKEN'`
+ * 與衝突格資訊。必須認 reason 才能回傳，否則呼叫端會把其他情況也當成
+ * 額滿處理，讀到 undefined 的 conflictSlotStartAt 並吞掉真正的錯誤訊息。
  */
 export function slotUnavailableDetails(err: ApiError): SlotUnavailableDetails | null {
   if (!err.is(ERROR_CODES.SLOT_UNAVAILABLE)) return null;
-  return (err.details as SlotUnavailableDetails) ?? null;
+  const details = err.details as Partial<SlotUnavailableDetails> | undefined;
+  if (!details || details.reason !== 'SLOT_TAKEN' || !details.conflictSlotStartAt) {
+    return null;
+  }
+  return details as SlotUnavailableDetails;
+}
+
+/**
+ * 取出還原已取消預約時的衝突對象。
+ *
+ * 與 `slotUnavailableDetails` 共用 `SLOT_UNAVAILABLE`，但形狀不同 ——
+ * 這裡沒有 `conflictSlotStartAt`（沒有日曆格可跳），而是帶 `conflicts`
+ * 讓管理員知道要聯繫誰協調改期。
+ */
+export function reopenConflictDetails(err: ApiError): ReopenConflictDetails | null {
+  if (!err.is(ERROR_CODES.SLOT_UNAVAILABLE)) return null;
+  const details = err.details as Partial<ReopenConflictDetails> | undefined;
+  if (!details || !Array.isArray(details.conflicts)) return null;
+  return details as ReopenConflictDetails;
 }
 
 /** 取出 `VALIDATION_ERROR` 指向的欄位名，用於把錯誤訊息掛到對應輸入框 */

@@ -36,6 +36,14 @@ export type CouponScope = 'item' | 'cart';
  */
 export type CouponValidityType = 'absolute' | 'relative';
 
+/**
+ * 後端策略判定的有效期狀態。
+ *
+ * 列表與結帳共用同一份判定，前端不可自行用 expiresAt 重算 ——
+ * absolute 型的有效期定義在券上，grant.expiresAt 只是發放當下的快照。
+ */
+export type CouponValidityState = 'ok' | 'not_started' | 'expired' | 'invalid';
+
 /** 發放方式。`claim` 為領取連結，`auto` 目前只支援註冊時發放 */
 export type CouponGrantType = 'admin' | 'auto' | 'claim';
 
@@ -176,6 +184,8 @@ export interface OrderItem {
   productDurationMinutes: number;
   /** 券的代碼快照，僅供顯示；核銷依據是 grant */
   couponCode: string;
+  /** 實際用掉的持有券。空字串表示這個品項沒用券 */
+  couponGrantId: string;
   discountAmount: number;
   lineFinalAmount: number;
 }
@@ -251,9 +261,12 @@ export interface MyCoupon {
   /** 空陣列表示不限。依**預約開始時間**的星期判斷，不是下單當下 */
   weekdays: Weekday[];
   firstPurchaseOnly: boolean;
+  /** 實際生效的到期時間（absolute 型為券的 validTo，relative 型為 grant 的到期日） */
   expiresAt: string;
   usedAt: string;
   revokedAt: string;
+  /** 後端策略判定的有效期狀態，用於區分「尚未開始」與「已過期」 */
+  validityState: CouponValidityState;
   /** 後端算好的綜合可用性，前端不需自行判斷 */
   usable: boolean;
 }
@@ -313,7 +326,9 @@ export interface Grant {
   uid: string;
   grantedAt: string;
   grantedBy: string;
+  /** 實際生效的到期時間，非 grant 上的快照 */
   expiresAt: string;
+  validityState: CouponValidityState;
   usedAt: string;
   usedOrderId: string;
   revokedAt: string;
