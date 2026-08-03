@@ -39,7 +39,11 @@ jobs:
             exit 0
           fi
 
-          # -L 跟隨 302（Apps Script 會轉址到 googleusercontent）
+          # -L 跟隨 302（Apps Script 會轉址到 googleusercontent）。
+          #
+          # 注意：AGENT_GUIDE §6.3 說 -L 在轉址時會丟失 body 而得到 411 ——
+          # 那是針對 POST。這裡是 GET 且只量往返時間、不看回應內容，
+          # 所以 -L 沒問題。要驗證 API 回應請照 §6.3 先取 Location 再單獨 GET。
           # --max-time 60：冷啟動最慢實測 14 秒，留足餘裕
           # 失敗不讓 workflow 紅字 —— 保溫失敗不是需要通知的事件，
           # 每次失敗都寄信只會讓人養成忽略通知的習慣
