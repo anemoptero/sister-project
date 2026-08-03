@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { callApi, isApiError, validationField } from '../../api/client';
 import { useSite } from '../../site/useSite';
 import type { SiteSettings } from '../../site/SiteProvider';
@@ -16,21 +16,43 @@ import {
  * 縮在一個小方框裡預覽沒有意義。但要按下儲存才會寫進後端、才對顧客生效。
  */
 export default function AdminSitePage() {
-  const { site, setSite, reload } = useSite();
-  const [draft, setDraft] = useState<SiteSettings>(site);
+  const { savedSite, setSite, previewSite, reload } = useSite();
+  const [draft, setDraft] = useState<SiteSettings>(savedSite);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [errorField, setErrorField] = useState('');
 
-  /** 改動即時套用到畫面，但尚未寫入後端 */
+  // 使用者是否動過表單。用 ref 而非 state：它只用來決定要不要接受背景
+  // 取回的新值，本身不該觸發重繪
+  const touched = useRef(false);
+
+  /**
+   * 改動即時套用到畫面，但尚未寫入後端。
+   *
+   * ⚠️ 走 previewSite 而非 setSite。曾經直接把 draft 灌進全域的 site，
+   * 造成三個問題：dirty 永遠是 false（兩者永遠相等）、未儲存的值被寫進
+   * localStorage 跟著跑到其他頁面、背景重新取回時會用舊值蓋掉別人剛存的設定。
+   */
   function update(patch: Partial<SiteSettings>) {
     const next = { ...draft, ...patch };
     setDraft(next);
-    setSite(next);
+    previewSite(next);
+    touched.current = true;
   }
 
-  const dirty = JSON.stringify(draft) !== JSON.stringify(site);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(savedSite);
+
+  // Apps Script 一次往返要一到十幾秒，背景取回很可能比本頁掛載還晚。
+  // 使用者還沒動過表單就跟上新值，動過就不覆蓋他正在編輯的內容
+  useEffect(() => {
+    if (!touched.current) {
+      setDraft(savedSite);
+    }
+  }, [savedSite]);
+
+  // 離開頁面時取消預覽，否則未儲存的店名與配色會跟著使用者跑到其他頁面
+  useEffect(() => () => previewSite(null), [previewSite]);
 
   async function handleSave() {
     setSaving(true);
@@ -56,6 +78,7 @@ export default function AdminSitePage() {
       });
       setDraft(data.site);
       setSite(data.site);
+      touched.current = false;
       setMessage('已儲存，顧客端會立即看到新的設定。');
     } catch (err) {
       if (isApiError(err)) {
@@ -70,9 +93,13 @@ export default function AdminSitePage() {
   }
 
   async function handleDiscard() {
-    // 從後端重新取回，把畫面上未儲存的改動丟掉
-    await reload();
-    setDraft(site);
+    // 從後端重新取回，把畫面上未儲存的改動丟掉。
+    // 用 reload 的回傳值，不能用閉包裡的 savedSite —— 那是這次 render
+    // 當下捕捉到的舊值，還原後又會變回未儲存的內容
+    const fresh = await reload();
+    setDraft(fresh);
+    previewSite(null);
+    touched.current = false;
     setMessage('');
     setError('');
   }
@@ -93,7 +120,7 @@ export default function AdminSitePage() {
         </div>
       </div>
 
-      {!site.configured && (
+      {!savedSite.configured && (
         <p className="notice">
           尚未設定過，目前顯示的是預設值。<strong>按下儲存之後才會對顧客生效。</strong>
         </p>
