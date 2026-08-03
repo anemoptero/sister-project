@@ -3,7 +3,7 @@ import { Modal } from '../../components/Modal';
 import type { AdminAppointment, AdminOrder } from '../../types/models';
 import { formatDateTime, formatPrice } from '../../utils/format';
 
-export type CloseAction = 'paid' | 'unpaid' | 'noShow' | 'cancel';
+export type CloseAction = 'paid' | 'noShow' | 'cancel';
 
 interface Option {
   action: CloseAction;
@@ -14,31 +14,35 @@ interface Option {
   danger?: boolean;
 }
 
+/**
+ * 三種結案方式。
+ *
+ * 曾經還有「完成，稍後收款」—— 它會產生「預約已完成、訂單卻待結案」這種
+ * 兩份狀態對不起來的組合，已移除。**完成即收款**：沒有金流、錢是現場收的，
+ * 服務做完卻沒收到錢在實務上就是還沒結案，那筆留在待結案即可。
+ *
+ * 三者都可以用「退回待結案」復原，而且那是唯一的復原路徑 —— 結案狀態
+ * 之間不可直接互轉，改按別的方式之前一定要先退回。
+ */
 const OPTIONS: Option[] = [
   {
     action: 'paid',
     title: '完成並收款',
     hint: '服務已完成，款項已收到。最常見的情況。',
-    confirm: '這些預約會標記為已完成，訂單標記為已收款。完成之後無法退回未完成。'
-  },
-  {
-    action: 'unpaid',
-    title: '完成，稍後收款',
-    hint: '服務已完成但還沒收到錢，之後可在列表補認列。',
-    confirm: '這些預約會標記為已完成，但訂單維持未收款。完成之後無法退回未完成。'
+    confirm: '這些預約會標記為已結案。按錯了可以用「退回待結案」復原。'
   },
   {
     action: 'noShow',
     title: '客人未到',
-    hint: '訂單作廢不計營收。時段不釋出，優惠券也不退回。',
-    confirm: '訂單會作廢並排除在營收之外。時段不會釋出，顧客的優惠券也不會退回。',
+    hint: '訂單不計營收。時段不釋出，優惠券也不退回。',
+    confirm: '訂單會標記為未完成並排除在營收之外。時段不會釋出，顧客的優惠券也不會退回。按錯了可以用「退回待結案」復原。',
     danger: true
   },
   {
     action: 'cancel',
     title: '取消預約',
     hint: '時段釋出、優惠券退回顧客。適合事先告知的情況。',
-    confirm: '時段會釋出給其他客人，訂單作廢，使用的優惠券會退回顧客帳戶。無法復原。',
+    confirm: '時段會釋出給其他客人，訂單標記為已取消，使用的優惠券會退回顧客帳戶。可以用「退回待結案」復原，但時段若已被別人預約就還原不了。',
     danger: true
   }
 ];

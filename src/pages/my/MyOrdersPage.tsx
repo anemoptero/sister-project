@@ -4,16 +4,19 @@ import { callApi, isApiError } from '../../api/client';
 import type { Order, OrderStatus } from '../../types/models';
 import { formatDateTime, formatPrice } from '../../utils/format';
 
+/**
+ * 顧客端用字。「待結案／已結案」是後台的作業用語，對顧客講不通 ——
+ * 同一個狀態在兩邊各自用讀得懂的說法即可，資料只有一份。
+ */
 const STATUS_LABELS: Record<OrderStatus, string> = {
-  created: '待付款',
-  free: '免付款',
-  paid: '已付款',
+  created: '已成立',
+  paid: '已完成',
   cancelled: '已取消',
-  void: '已作廢'
+  void: '未完成'
 };
 
 /** 哪些狀態算「還有效」，用來決定標籤顏色 */
-const ACTIVE_STATUSES: OrderStatus[] = ['created', 'free', 'paid'];
+const ACTIVE_STATUSES: OrderStatus[] = ['created', 'paid'];
 
 export default function MyOrdersPage() {
   const [orders, setOrders] = useState<Order[] | null>(null);

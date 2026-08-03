@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { callApi, isApiError, reopenConflictDetails } from '../../api/client';
 import { Modal } from '../../components/Modal';
 import { StatTile } from '../../components/StatTile';
-import type { AdminAppointment, AdminOrder, AppointmentStatus } from '../../types/models';
+import type { AdminAppointment, AdminOrder, OrderStatus } from '../../types/models';
 import { formatDateTime, formatDuration, formatPrice } from '../../utils/format';
 import { CloseAppointmentModal, type CloseAction } from './CloseAppointmentModal';
 import { DateRangeFilter, defaultRange, type DateRange } from './DateRangeFilter';
@@ -22,29 +22,23 @@ const TAB_LABELS: Record<Tab, string> = {
   all: '全部'
 };
 
-const STATUS_LABELS: Record<AppointmentStatus, string> = {
-  booked: '未完成',
-  completed: '已完成',
-  cancelled: '已取消',
-  no_show: '未到'
+/**
+ * 狀態一律看**訂單**。
+ *
+ * 預約自身也有狀態，但那是內部欄位（讓 appointments 能在資料庫端依狀態
+ * 篩選），與訂單狀態嚴格一對一，不呈現在畫面上。兩個欄位並列只會讓人
+ * 困惑哪個才算數。
+ */
+const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+  created: '待結案',
+  paid: '已結案',
+  void: '未完成',
+  cancelled: '已取消'
 };
 
-function paymentLabel(order: AdminOrder | undefined): string {
+function statusLabel(order: AdminOrder | undefined): string {
   if (!order) return '—';
-  switch (order.status) {
-    case 'paid':
-      return '已收款';
-    case 'free':
-      return '免付款';
-    case 'created':
-      return '未收款';
-    case 'cancelled':
-      return '已取消';
-    case 'void':
-      return '已作廢';
-    default:
-      return order.status;
-  }
+  return ORDER_STATUS_LABELS[order.status] ?? order.status;
 }
 
 /**
@@ -66,7 +60,6 @@ export default function AdminAppointmentsPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  const [acting, setActing] = useState('');
   /** 待確認退回的預約。結案後帳目就變了，退回一樣要確認 */
   const [reopening, setReopening] = useState<AdminAppointment | null>(null);
 
@@ -126,9 +119,9 @@ export default function AdminAppointmentsPage() {
             appointmentId: appointment.appointmentId
           });
         } else {
+          // 完成即收款，沒有第二種選擇
           await callApi('adminCompleteAppointment', {
-            appointmentId: appointment.appointmentId,
-            markPaid: action === 'paid'
+            appointmentId: appointment.appointmentId
           });
         }
         done++;
@@ -149,7 +142,8 @@ export default function AdminAppointmentsPage() {
   }
 
   /**
-   * 取消結案，退回未完成。
+   * 退回待結案。**這是唯一的復原路徑** —— 結案狀態之間不可直接互轉，
+   * 要改按別的結案方式一定要先退回。
    *
    * 已完成與未到不釋放時段，直接改狀態即可。已取消的時段已經釋出，後端會
    * 重新確認沒被佔走、並把當初歸還的優惠券扣回；被佔用時回 SLOT_UNAVAILABLE
@@ -166,8 +160,8 @@ export default function AdminAppointmentsPage() {
       const restored = data.restoredCoupons ?? [];
       setMessage(
         restored.length > 0
-          ? `已退回未完成，訂單回到未收款，並扣回優惠券：${restored.join('、')}。`
-          : '已退回未完成，訂單也回到未收款。'
+          ? `已退回待結案，並扣回優惠券：${restored.join('、')}。`
+          : '已退回待結案。'
       );
       await load();
     } catch (err) {
@@ -188,21 +182,6 @@ export default function AdminAppointmentsPage() {
       // 一律關閉，否則錯誤訊息會被 Modal 蓋住
       setReopening(null);
       setBusy(false);
-    }
-  }
-
-  async function togglePaid(order: AdminOrder, paid: boolean) {
-    setActing(order.orderId);
-    setError('');
-    setMessage('');
-    try {
-      await callApi('adminSetOrderPaid', { orderId: order.orderId, paid });
-      setMessage(paid ? '已認列收款。' : '已取消收款認列。');
-      await load();
-    } catch (err) {
-      setError(isApiError(err) ? err.message : '操作失敗，請稍後再試。');
-    } finally {
-      setActing('');
     }
   }
 
@@ -309,7 +288,6 @@ export default function AdminAppointmentsPage() {
                 <th>預約時間</th>
                 <th>服務內容</th>
                 <th>金額</th>
-                <th>收款</th>
                 <th>狀態</th>
                 <th />
               </tr>
@@ -347,16 +325,7 @@ export default function AdminAppointmentsPage() {
                     <td>{order ? formatPrice(order.finalAmount) : '—'}</td>
                     <td>
                       <span className={`tag ${order?.status === 'paid' ? 'tag--on' : 'tag--off'}`}>
-                        {paymentLabel(order)}
-                      </span>
-                    </td>
-                    <td>
-                      <span
-                        className={`tag ${
-                          appointment.status === 'completed' ? 'tag--on' : 'tag--off'
-                        }`}
-                      >
-                        {STATUS_LABELS[appointment.status]}
+                        {statusLabel(order)}
                       </span>
                     </td>
                     <td>
@@ -372,28 +341,7 @@ export default function AdminAppointmentsPage() {
                           </button>
                         )}
 
-                        {appointment.status === 'completed' && order?.status === 'created' && (
-                          <button
-                            type="button"
-                            className="secondary small"
-                            disabled={acting === order.orderId}
-                            onClick={() => void togglePaid(order, true)}
-                          >
-                            認列收款
-                          </button>
-                        )}
-                        {appointment.status === 'completed' && order?.status === 'paid' && (
-                          <button
-                            type="button"
-                            className="secondary small"
-                            disabled={acting === order.orderId}
-                            onClick={() => void togglePaid(order, false)}
-                          >
-                            取消認列
-                          </button>
-                        )}
-
-                        {/* 誤按結案／誤取消的復原路徑，三種結案狀態都可退回 */}
+                        {/* 誤按結案／誤取消的唯一復原路徑，三種結案狀態都可退回 */}
                         {appointment.status !== 'booked' && (
                           <button
                             type="button"
@@ -401,7 +349,7 @@ export default function AdminAppointmentsPage() {
                             disabled={busy}
                             onClick={() => setReopening(appointment)}
                           >
-                            退回未完成
+                            退回待結案
                           </button>
                         )}
                       </div>

@@ -547,33 +547,32 @@ export interface ApiActionMap {
   };
 
   /**
-   * 標記完成並認列收款。第一階段沒有金流串接，付款一律手動認列。
+   * 標記完成並認列收款。**完成即收款** —— 沒有金流，錢是現場收的，
+   * 服務做完卻沒收到錢在實務上就是還沒結案，那筆預約留在待結案即可。
    *
-   * `markPaid` 預設 true。設為 false 用於「已完成但還沒收到錢」，
-   * 之後再用 `adminSetOrderPaid` 補認列。
+   * 只能從待結案出發。已結案／未完成／已取消要先 `adminReopenAppointment`。
    */
   adminCompleteAppointment: {
-    payload: { appointmentId: string; markPaid?: boolean };
+    payload: { appointmentId: string };
     data: { appointmentId: string; status: 'completed'; orderStatus: string };
   };
 
   /**
    * 標記未到。與取消是刻意區分的兩種處理：
-   * 取消會釋出時段並歸還優惠券，未到兩者都不做，訂單改為 `void`。
+   * 取消會釋出時段並歸還優惠券，未到兩者都不做，訂單改為「未完成」。
+   *
+   * 同樣只能從待結案出發。
    */
   adminSetAppointmentNoShow: {
     payload: { appointmentId: string };
-    data: { appointmentId: string; status: 'no_show' };
-  };
-
-  /** 單獨調整收款狀態。`free`（全額折抵）不可標記，金額為 0 沒有收款這回事 */
-  adminSetOrderPaid: {
-    payload: { orderId: string; paid: boolean };
-    data: { orderId: string; status: 'paid' | 'created'; changed: boolean };
+    data: { appointmentId: string; status: 'no_show'; orderStatus: string };
   };
 
   /**
    * 取消結案，把預約退回未完成。人為操作必然有失誤，需要復原路徑。
+   *
+   * **這是唯一的復原路徑。** 結案狀態之間不可直接互轉，改按別的結案方式
+   * 之前一定要先退回。
    *
    * 完成、未到、已取消三種都可退回。前兩者不釋放時段，直接改狀態；
    * 已取消的時段已經釋出，後端會重新確認沒被佔走並把優惠券扣回，

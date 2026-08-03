@@ -22,7 +22,20 @@ export type UserRole = 'customer' | 'admin';
 export type UserStatus = 'active' | 'disabled';
 
 export type AppointmentStatus = 'booked' | 'cancelled' | 'completed' | 'no_show';
-export type OrderStatus = 'created' | 'free' | 'paid' | 'cancelled' | 'void';
+/**
+ * 訂單狀態。對外的唯一狀態來源 —— 預約自身的狀態不呈現在任何畫面上。
+ *
+ * ```text
+ *   created    待結案    訂單成立、或任何退回
+ *   paid       已結案    完成並收款
+ *   void       未完成    客人未到
+ *   cancelled  已取消    取消預約
+ * ```
+ *
+ * 先前還有一個 `free`（全額折抵）。已移除：0 元訂單就是金額為 0 的普通
+ * 訂單，一樣要人工結案。
+ */
+export type OrderStatus = 'created' | 'paid' | 'cancelled' | 'void';
 
 /** `experience` 為體驗券，全額折抵；`discount` 依 `discountAmount` 折抵 */
 export type CouponType = 'discount' | 'experience';
@@ -221,7 +234,7 @@ export interface OrderPricing {
   itemDiscountAmount: number;
   cartDiscountAmount: number;
   discountAmount: number;
-  /** 不會小於 0；為 0 時訂單 status 是 `free` */
+  /** 不會小於 0。為 0（全額折抵）時仍是一般訂單，一樣要結案 */
   finalAmount: number;
 }
 
@@ -343,15 +356,15 @@ export type StatsGroupBy = 'day' | 'week' | 'month';
 /**
  * 營收拆成三個數字，讓「未收 + 已收 = 應收」的關係在畫面上自明。
  *
- * `free`（全額折抵）金額必為 0，只計入應收而不分配到未收或已收，
- * 等式仍然成立。已取消與已作廢都不計入任何一項。
+ * 已取消與未完成都不計入任何一項。全額折抵的訂單金額為 0，
+ * 計入哪一邊都不影響等式成立。
  */
 export interface SalesStatsBucket {
-  /** 應收：待付款 + 免付款 + 已付款 */
+  /** 應收：待結案 + 已結案 */
   totalSales: number;
-  /** 已收：狀態為 paid */
+  /** 已收：已結案 */
   paidSales: number;
-  /** 未收：狀態為 created */
+  /** 未收：待結案 */
   unpaidSales: number;
   label: string;
   orderCount: number;

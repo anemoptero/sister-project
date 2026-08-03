@@ -112,11 +112,21 @@ describe('後果說明', () => {
     expect(screen.getByText(/優惠券會退回顧客帳戶/)).toBeInTheDocument();
   });
 
-  it('完成明講無法退回未完成', async () => {
+  it('完成明講按錯了可以退回', async () => {
+    // 這裡原本斷言的是「完成之後無法退回未完成」，而那句話與實作不符 ——
+    // 後端一直都允許從已完成退回，列表上也有那顆按鈕。文案錯了會讓
+    // 管理員不敢按，或以為誤按無法挽回
     renderModal();
 
     await userEvent.click(screen.getByRole('button', { name: /完成並收款/ }));
-    expect(screen.getByText(/完成之後無法退回未完成/)).toBeInTheDocument();
+    expect(screen.getByText(/退回待結案/)).toBeInTheDocument();
+  });
+
+  it('沒有「完成，稍後收款」這個選項 —— 完成即收款', () => {
+    // 它會產生「預約已完成、訂單卻待結案」這種兩份狀態對不起來的組合
+    renderModal();
+
+    expect(screen.queryByRole('button', { name: /稍後收款/ })).not.toBeInTheDocument();
   });
 });
 
