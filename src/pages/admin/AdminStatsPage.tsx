@@ -15,6 +15,22 @@ const GROUP_LABELS: Record<StatsGroupBy, string> = {
   month: '每月'
 };
 
+/**
+ * 圖表軸標籤用的短格式。
+ *
+ *   day    2026-07-31 → 07/31
+ *   week   2026-W31   → W31
+ *   month  2026-07    → 原樣（月檢視的長條本來就少，年份留著有意義）
+ *
+ * 完整期間仍走 BarDatum.label（進 aria-label）與下方的明細表，
+ * 縮短的只是軸上那一行。
+ */
+function shortPeriodLabel(label: string, groupBy: StatsGroupBy): string {
+  if (groupBy === 'day') return label.slice(5).replace('-', '/');
+  if (groupBy === 'week') return label.slice(label.indexOf('W'));
+  return label;
+}
+
 export default function AdminStatsPage() {
   const [range, setRange] = useState<DateRange>(defaultRange());
   const [groupBy, setGroupBy] = useState<StatsGroupBy>('day');
@@ -119,6 +135,7 @@ export default function AdminStatsPage() {
             <BarChart
               data={stats.items.map((item) => ({
                 label: item.label,
+                shortLabel: shortPeriodLabel(item.label, groupBy),
                 value: item.totalSales,
                 detail: `已收 ${formatPrice(item.paidSales)}，${item.orderCount} 筆訂單`
               }))}

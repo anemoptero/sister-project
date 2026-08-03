@@ -1449,24 +1449,30 @@ button.danger:hover:not(:disabled) {
   margin: 0 0 var(--space-3);
 }
 
+/* 說明與軸標籤帶之間要留距離，否則兩行灰字會黏成一團 */
+.chart figcaption {
+  margin-top: var(--space-3);
+}
+
 .chart-plot {
   display: flex;
   align-items: flex-end;
   /* 長條之間留 2px 底色間隙，相鄰的量才不會看起來連成一片 */
   gap: 2px;
   /*
-   * padding-top 是留給 tooltip 的位置，必須裝得下 hover 起來的那一版：
-   * 兩行文字（0.8rem + .hint 的 0.9rem，行高 1.7）+ 內距 16px + 外框 2px
-   * + 底距 4px ≈ 68px，取 5rem（80px）留餘裕。
+   * ⚠️ 這個容器會裁切超出範圍的內容，而且不會有任何警告：overflow-x 一旦
+   * 設成 auto（長條多時要能橫向捲動），CSS 規範會讓另一軸的 visible 一併
+   * 算成 auto，於是「上下」也開始裁切。tooltip 與軸標籤都浮在長條之外，
+   * 因此上下都必須用 padding 把位置留出來，左右則由 .is-start / .is-end
+   * 靠邊對齊處理。
    *
-   * ⚠️ 不夠高就會被裁切，而且不會有任何警告：overflow-x 一旦設成 auto，
-   * CSS 規範會讓另一軸的 visible 一併算成 auto，於是垂直方向也開始裁切。
-   * 原本只留 var(--space-5)（24px），tooltip 有 44px 露在外面被切掉。
-   *
-   * height 含 padding（全域 border-box），5rem + 12rem 讓長條區維持 12rem。
+   * padding-top    tooltip 帶：兩行 + 內距外框 ≈ 47px，取 3.5rem
+   * padding-bottom x 軸標籤帶：一行 + margin ≈ 27px，取 2rem
+   * height 含 padding（全域 border-box），扣掉上下之後長條區為 12rem
    */
-  height: 17rem;
-  padding-top: 5rem;
+  height: 17.5rem;
+  padding-top: 3.5rem;
+  padding-bottom: 2rem;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -1525,21 +1531,56 @@ button.danger:hover:not(:disabled) {
   background: var(--color-surface);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-3);
   box-shadow: var(--shadow-md);
   z-index: 1;
 }
 
+/* 說明文字比金額小一級。用 .hint 會變成 0.9rem，反而比它要解釋的數字還大 */
+.chart-tip-detail {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
+.chart-tip strong {
+  line-height: 1.3;
+}
+
+/*
+ * 首尾靠邊對齊。以長條為中心的話，最左邊那根的 tooltip 會有一半落在
+ * 繪圖區之外被裁掉 —— 軸標籤同理。
+ */
+.chart-tip.is-start,
+.chart-label.is-start {
+  left: 0;
+  transform: none;
+}
+
+.chart-tip.is-end,
+.chart-label.is-end {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+/*
+ * 軸標籤浮在長條區之外（top: 100% 落進 .chart-plot 的 padding-bottom），
+ * 不佔用欄位高度 —— 若讓它參與欄位的 flex 流，長條的百分比高度就會
+ * 以「扣掉標籤之後」的空間計算，最大值那根反而撐不滿。
+ *
+ * 不再旋轉：斜放只是把「擠在一起」換成「難以閱讀」。密集時改由
+ * BarChart 的 MAX_LABELS 等距取樣，讓標籤維持水平。
+ */
 .chart-label {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
   margin-top: var(--space-2);
   font-size: 0.7rem;
   color: var(--color-text-muted);
   white-space: nowrap;
-  /* 期間標籤在日檢視下很密，斜放才不會互相重疊 */
-  transform: rotate(-45deg);
-  transform-origin: top left;
-  height: 2.5rem;
-  align-self: flex-start;
 }
 
 /* --- 水平長條 --- */
