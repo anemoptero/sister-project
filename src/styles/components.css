@@ -1454,15 +1454,28 @@ button.danger:hover:not(:disabled) {
   align-items: flex-end;
   /* 長條之間留 2px 底色間隙，相鄰的量才不會看起來連成一片 */
   gap: 2px;
-  height: 12rem;
-  padding-top: var(--space-5);
+  /*
+   * padding-top 是留給 tooltip 的位置，必須裝得下 hover 起來的那一版：
+   * 兩行文字（0.8rem + .hint 的 0.9rem，行高 1.7）+ 內距 16px + 外框 2px
+   * + 底距 4px ≈ 68px，取 5rem（80px）留餘裕。
+   *
+   * ⚠️ 不夠高就會被裁切，而且不會有任何警告：overflow-x 一旦設成 auto，
+   * CSS 規範會讓另一軸的 visible 一併算成 auto，於是垂直方向也開始裁切。
+   * 原本只留 var(--space-5)（24px），tooltip 有 44px 露在外面被切掉。
+   *
+   * height 含 padding（全域 border-box），5rem + 12rem 讓長條區維持 12rem。
+   */
+  height: 17rem;
+  padding-top: 5rem;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
 .chart-col {
   position: relative;
+  /* 上限讓資料點很少時不會被拉寬成整片色塊，日期標籤也才不會離長條太遠 */
   flex: 1 0 1.75rem;
+  max-width: 2.5rem;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -1471,7 +1484,12 @@ button.danger:hover:not(:disabled) {
 }
 
 .chart-bar {
+  /*
+   * 長條不填滿整個欄位，留白是刻意的 —— 填滿會讓資料點少的時候
+   * 看起來像一塊色塊而不是圖表。
+   */
   width: 100%;
+  max-width: 24px;
   min-height: 2px;
   padding: 0;
   border: none;
