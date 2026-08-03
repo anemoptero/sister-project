@@ -225,6 +225,17 @@ button.small {
   border-radius: var(--radius-lg);
   padding: var(--space-5) var(--space-4);
   box-shadow: var(--shadow-sm);
+  /*
+   * 頁面層級的區塊一律以 --space-5 為垂直節奏（.filter-bar、.stat-row 同值）。
+   * 卡片原本漏了這一條，相鄰的兩張卡片會直接貼在一起，而它上面的
+   * .stat-row 卻留了 24px —— 看起來就像上面斷開、下面黏住。
+   */
+  margin-bottom: var(--space-5);
+}
+
+/* 收在容器底部時不要多一段空白，頁面本身的 padding 已經夠了 */
+.card:last-child {
+  margin-bottom: 0;
 }
 
 .card h2 {
@@ -1675,6 +1686,10 @@ button.danger:hover:not(:disabled) {
   grid-template-columns: 1fr auto 1fr auto 1fr;
   align-items: center;
   gap: var(--space-2);
+  /*
+   * 刻意比其他區塊的 --space-5 窄一級：這一排與下方的 .stat-row 同屬
+   * 「摘要數字」，靠得近才看得出是一組。不是漏改，請勿統一成 --space-5。
+   */
   margin-bottom: var(--space-4);
 }
 
