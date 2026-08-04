@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { callApi, isApiError, reopenConflictDetails } from '../../api/client';
+import { PAGE_SIZE, fetchAll, pageSlice } from '../../api/fetchAll';
+import { useLatestRequest } from '../../api/useLatestRequest';
 import { Modal } from '../../components/Modal';
+import { Pagination } from '../../components/Pagination';
 import { StatTile } from '../../components/StatTile';
 import type { AdminAppointment, AdminOrder, OrderStatus } from '../../types/models';
 import { formatDateTime, formatDuration, formatPrice } from '../../utils/format';
@@ -53,6 +56,7 @@ function isPast(appointment: AdminAppointment): boolean {
 export default function AdminAppointmentsPage() {
   const [range, setRange] = useState<DateRange>(defaultRange());
   const [tab, setTab] = useState<Tab>('open');
+  const [page, setPage] = useState(1);
   const [appointments, setAppointments] = useState<AdminAppointment[] | null>(null);
   const [ordersById, setOrdersById] = useState<Record<string, AdminOrder>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -63,18 +67,52 @@ export default function AdminAppointmentsPage() {
   /** 待確認退回的預約。結案後帳目就變了，退回一樣要確認 */
   const [reopening, setReopening] = useState<AdminAppointment | null>(null);
 
+  const isLatest = useLatestRequest();
+
+  /**
+   * 載入該區間的預約與訂單。
+   *
+   * 兩者都用 `fetchAll` 整批抓回：待收款統計是在前端加總的，只抓一頁的話
+   * 那個數字會靜默變成「當頁的待收款」——— 畫面上看不出任何異常。
+   *
+   * 訂單傳 `includeItems: false`：這一頁只顯示金額與狀態，不需要明細，
+   * 省下後端一次查詢與可觀的回應大小。
+   */
   const load = useCallback(async () => {
+    // 連按兩次日期預設會發出兩個並行請求，Apps Script 的回應順序不保證。
+    // 舊請求晚回時要丟掉，否則畫面會停在上一個區間的資料
+    const stillLatest = isLatest();
+
     setError('');
     setAppointments(null);
     setSelected(new Set());
 
     const [apptResult, orderResult] = await Promise.allSettled([
-      callApi('adminListAppointments', { from: range.from, to: range.to, limit: 200 }),
-      callApi('adminListOrders', { from: range.from, to: range.to, limit: 200 })
+      fetchAll<AdminAppointment>(async (cursor) => {
+        const data = await callApi('listAppointments', {
+          from: range.from,
+          to: range.to,
+          limit: 1000,
+          ...(cursor ? { cursor } : {})
+        });
+        return { items: data.appointments, nextCursor: data.nextCursor };
+      }),
+      fetchAll<AdminOrder>(async (cursor) => {
+        const data = await callApi('listOrders', {
+          from: range.from,
+          to: range.to,
+          limit: 1000,
+          includeItems: false,
+          ...(cursor ? { cursor } : {})
+        });
+        return { items: data.orders, nextCursor: data.nextCursor };
+      })
     ]);
 
+    if (!stillLatest()) return;
+
     if (apptResult.status === 'fulfilled') {
-      setAppointments(apptResult.value.appointments);
+      setAppointments(apptResult.value);
     } else {
       setAppointments([]);
       setError(isApiError(apptResult.reason) ? apptResult.reason.message : '載入預約失敗。');
@@ -82,16 +120,21 @@ export default function AdminAppointmentsPage() {
 
     if (orderResult.status === 'fulfilled') {
       const map: Record<string, AdminOrder> = {};
-      orderResult.value.orders.forEach((order) => {
+      orderResult.value.forEach((order) => {
         if (order.appointmentId) map[order.appointmentId] = order;
       });
       setOrdersById(map);
     }
-  }, [range]);
+  }, [range, isLatest]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // 換分頁或換區間後停在第 5 頁會看到空白
+  useEffect(() => {
+    setPage(1);
+  }, [tab, range]);
 
   /**
    * 執行結案或取消。
@@ -192,11 +235,20 @@ export default function AdminAppointmentsPage() {
     return true;
   });
 
-  /** 只有未完成的可以被勾選 —— 其餘沒有可執行的動作 */
+  /**
+   * 只有未完成的可以被勾選 —— 其餘沒有可執行的動作。
+   *
+   * 範圍是**當前分頁篩選下的全部**，不是當頁 50 筆。「全選」選的是
+   * 使用者心裡的那一整批，不是他剛好看到的那一頁。
+   */
   const selectable = visible.filter((a) => a.status === 'booked');
   const selectedList = selectable.filter((a) => selected.has(a.appointmentId));
   const allSelected = selectable.length > 0 && selectedList.length === selectable.length;
 
+  const rows = pageSlice(visible, page);
+
+  // ⚠️ 加總範圍是 `all`（整個區間），不是當頁。
+  // 若日後改成後端分頁，這個數字會靜默變成「當頁的待收款」
   const unpaid = all.reduce((sum, appointment) => {
     const order = ordersById[appointment.appointmentId];
     return order?.status === 'created' ? sum + order.finalAmount : sum;
@@ -293,7 +345,7 @@ export default function AdminAppointmentsPage() {
               </tr>
             </thead>
             <tbody>
-              {visible.map((appointment) => {
+              {rows.map((appointment) => {
                 const order = ordersById[appointment.appointmentId];
                 const inactive =
                   appointment.status === 'cancelled' || appointment.status === 'no_show';
@@ -360,6 +412,16 @@ export default function AdminAppointmentsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {visible.length > 0 && (
+        <Pagination
+          total={visible.length}
+          page={page}
+          onChange={setPage}
+          pageSize={PAGE_SIZE}
+          unit="筆預約"
+        />
       )}
 
       <p className="hint">

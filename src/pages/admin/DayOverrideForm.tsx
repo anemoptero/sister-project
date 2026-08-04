@@ -28,6 +28,7 @@ export function DayOverrideForm() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState('');
   const [affected, setAffected] = useState(0);
+  const [dayTotal, setDayTotal] = useState(0);
   const [error, setError] = useState('');
 
   async function handleSubmit(event: FormEvent) {
@@ -35,6 +36,7 @@ export function DayOverrideForm() {
     setError('');
     setResult('');
     setAffected(0);
+    setDayTotal(0);
 
     if (!date) {
       setError('請選擇日期。');
@@ -63,7 +65,10 @@ export function DayOverrideForm() {
             ? `${date} 已設為公休。`
             : `${date} 的營業時間已設為 ${openTime}–${closeTime}。`
       );
+      // 這是**落在新營業區間之外**的筆數，不是當天總筆數 ——
+      // 縮短半小時營業時間時，兩者差很多
       setAffected(data.existingAppointmentCount ?? 0);
+      setDayTotal(data.dayAppointmentCount ?? 0);
     } catch (err) {
       setError(isApiError(err) ? err.message : '設定失敗，請稍後再試。');
     } finally {
@@ -76,6 +81,15 @@ export function DayOverrideForm() {
       <h2>單日例外</h2>
       <p className="hint">
         臨時公休或特殊營業時間。單日設定優先於上方的每週設定。
+      </p>
+      {/*
+        後端目前沒有列出既有例外的 API（要新增 adminListDayOverrides 才做得到），
+        所以設完之後無法從任何畫面確認哪些日子設過。在補上之前先誠實說明，
+        總比讓管理員以為自己漏設了而重設一次好。
+      */}
+      <p className="notice">
+        設定後<strong>無法從這個畫面查看已設過哪些日期</strong>，請自行記錄。
+        要確認某天是否生效，可到前台的預約流程看那天有沒有可選時段。
       </p>
 
       <form onSubmit={(e) => void handleSubmit(e)}>
@@ -153,9 +167,15 @@ export function DayOverrideForm() {
             <p className="success">{result}</p>
             {affected > 0 && (
               <p className="notice">
-                這天已經有 <strong>{affected}</strong> 筆預約，
+                這天有 <strong>{affected}</strong> 筆預約落在新的營業時間之外
+                {dayTotal > affected && `（當天共 ${dayTotal} 筆）`}，
                 系統<strong>不會自動取消</strong>它們。請主動聯繫這些顧客安排改期 ——
-                在「預約查詢」頁可以查到名單。
+                在「預約與訂單」頁可以查到名單。
+              </p>
+            )}
+            {affected === 0 && dayTotal > 0 && (
+              <p className="hint">
+                這天有 {dayTotal} 筆預約，但都落在新的營業時間內，不受影響。
               </p>
             )}
           </>

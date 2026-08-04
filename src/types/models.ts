@@ -19,7 +19,17 @@
 // ---------------------------------------------------------------------------
 
 export type UserRole = 'customer' | 'admin';
-export type UserStatus = 'active' | 'disabled';
+
+/**
+ * 帳號狀態。**三個值，不是兩個。**
+ *
+ * `deleted` 目前沒有任何流程會產生（要到帳戶合併才用得到），但後端的
+ * `USER_STATUSES` 與 `docs/DATA_MODEL.md` §3.2 都是三個值。前端少列一個
+ * 的後果不是型別錯誤，是 UI 出錯：`<select>` 沒有對應的 option 時會落到
+ * `selectedIndex = -1` 顯示空白，管理員一碰下拉就把 `deleted` 悄悄改成
+ * `active`。所以 `deleted` 在畫面上做成唯讀顯示，不可從下拉選單選到。
+ */
+export type UserStatus = 'active' | 'disabled' | 'deleted';
 
 export type AppointmentStatus = 'booked' | 'cancelled' | 'completed' | 'no_show';
 /**
@@ -176,7 +186,7 @@ export interface Appointment {
   createdAt: string;
 }
 
-/** `adminListAppointments` 會額外帶上是誰的預約 */
+/** `listAppointments` 一律帶上是誰的預約（顧客拿到的是自己的） */
 export interface AdminAppointment extends Appointment {
   uid: string;
 }
@@ -217,7 +227,12 @@ export interface Order {
   status: OrderStatus;
   createdAt: string;
   cancelledAt: string;
-  /** 列表 API 為節省查詢不展開品項，會是空陣列 */
+  /**
+   * 品項明細。
+   *
+   * `listOrders` 預設會展開（只多一次查詢，不是 N+1）；傳
+   * `includeItems: false` 時是空陣列。`adminGetCustomerDetail` 目前不展開。
+   */
   items: OrderItem[];
 }
 

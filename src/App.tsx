@@ -1,17 +1,10 @@
+import { lazy } from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthProvider';
 import { AdminLayout } from './components/AdminLayout';
 import { Layout } from './components/Layout';
 import { RequireAdmin, RequireAuth, RequireProfile } from './components/RouteGuards';
 import { SiteProvider } from './site/SiteProvider';
-import AdminSitePage from './pages/admin/AdminSitePage';
-import AdminBusinessHoursPage from './pages/admin/AdminBusinessHoursPage';
-import AdminAppointmentsPage from './pages/admin/AdminAppointmentsPage';
-import AdminCouponsPage from './pages/admin/AdminCouponsPage';
-import AdminHomePage from './pages/admin/AdminHomePage';
-import AdminCustomersPage from './pages/admin/AdminCustomersPage';
-import AdminStatsPage from './pages/admin/AdminStatsPage';
-import AdminProductsPage from './pages/admin/AdminProductsPage';
 import BookingPage from './pages/booking/BookingPage';
 import ClaimCouponPage from './pages/my/ClaimCouponPage';
 import HomePage from './pages/HomePage';
@@ -22,6 +15,25 @@ import MyOrdersPage from './pages/my/MyOrdersPage';
 import ProductsPage from './pages/ProductsPage';
 import NotFoundPage from './pages/NotFoundPage';
 import ProfilePage from './pages/ProfilePage';
+
+/**
+ * 後台頁面改為 lazy 載入。
+ *
+ * 為什麼：顧客端的使用者**永遠不會**打開這七個頁面，卻要在首次載入時
+ * 一併下載它們（圖表、表單、批次操作邏輯佔了整包相當大的比例）。
+ * 這個系統是在 LINE 內建瀏覽器裡開的，行動網路下的首屏時間直接受影響。
+ *
+ * 管理員這邊的代價只有第一次進某頁時多一次小 chunk 的請求 ——
+ * 相較於 Apps Script 本身 1～14 秒的 API 延遲，可以忽略。
+ */
+const AdminHomePage = lazy(() => import('./pages/admin/AdminHomePage'));
+const AdminProductsPage = lazy(() => import('./pages/admin/AdminProductsPage'));
+const AdminBusinessHoursPage = lazy(() => import('./pages/admin/AdminBusinessHoursPage'));
+const AdminCouponsPage = lazy(() => import('./pages/admin/AdminCouponsPage'));
+const AdminCustomersPage = lazy(() => import('./pages/admin/AdminCustomersPage'));
+const AdminAppointmentsPage = lazy(() => import('./pages/admin/AdminAppointmentsPage'));
+const AdminStatsPage = lazy(() => import('./pages/admin/AdminStatsPage'));
+const AdminSitePage = lazy(() => import('./pages/admin/AdminSitePage'));
 
 /**
  * 路由表，對應 docs/DEV_PLAN.md Phase 9 與 AGENT_GUIDE.md §9.1。
@@ -40,6 +52,8 @@ export default function App() {
         <Routes>
           {/* --- 後台 --- */}
           <Route element={<RequireAdmin />}>
+            {/* Suspense 掛在 AdminLayout 內部包住 Outlet，載入 chunk 時
+                導覽列維持不動，只有內容區出現骨架 */}
             <Route element={<AdminLayout />}>
               <Route path="/admin" element={<AdminHomePage />} />
               <Route path="/admin/products" element={<AdminProductsPage />} />

@@ -23,7 +23,8 @@ export default function MyAppointmentsPage() {
   const load = useCallback(async () => {
     setError('');
     try {
-      const data = await callApi('listMyAppointments', {});
+      // 不帶 uid：後端對非管理員一律強制查自己
+      const data = await callApi('listAppointments', { limit: 200 });
       setAppointments(data.appointments);
     } catch (err) {
       setError(isApiError(err) ? err.message : '載入預約失敗，請稍後再試。');

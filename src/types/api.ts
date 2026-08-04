@@ -171,11 +171,18 @@ export interface ValidationErrorDetails {
 
 export interface PagedPayload {
   limit?: number;
-  cursor?: number | null;
+  /**
+   * 上一頁回傳的 `nextCursor`，原樣送回即可。
+   *
+   * 後端實際上是 offset（`adminOffsetOf_`），但**不要自己算** ——
+   * 它的型別與語意都可能改變，呼叫端只該把拿到的值傳回去。
+   */
+  cursor?: string | number | null;
 }
 
 export interface PagedData {
-  nextCursor: number | null;
+  /** `null` 表示沒有下一頁。是字串，不是數字 —— 後端以 `String(offset)` 回傳 */
+  nextCursor: string | null;
 }
 
 export interface DateRangePayload {
@@ -289,9 +296,29 @@ export interface ApiActionMap {
     payload: { appointmentId: string; reason?: string };
     data: { appointmentId: string; status: 'cancelled' };
   };
-  listMyAppointments: {
-    payload: { status?: string };
-    data: { appointments: Appointment[] };
+  /**
+   * 列出預約。**權限決定看得到誰的資料。**
+   *
+   * 取代了原本的 `listMyAppointments` 與 `adminListAppointments` ——
+   * 兩者的查詢條件、排序、狀態篩選完全相同，差別只在「查誰的」，
+   * 而那正是權限該決定的事。
+   *
+   * ```text
+   * 非 admin：一律強制查自己，傳入的 uid 被**靜默忽略**（不報錯）
+   * admin   ：可指定 uid 查某人，或不指定配合日期區間查全部
+   * ```
+   *
+   * 日期區間只在「查全部」時有預設值（近 30 天）。指定 uid 又不帶
+   * `from`/`to` 時查全部歷史 —— 顧客要看得到自己所有的預約。
+   */
+  listAppointments: {
+    payload: Partial<DateRangePayload> &
+      PagedPayload & { uid?: string; status?: string };
+    data: PagedData & {
+      appointments: AdminAppointment[];
+      /** 實際採用的區間。未套用區間（查單人全部歷史）時為 `null` */
+      range: { from: string; to: string } | null;
+    };
   };
   previewOrder: {
     payload: {
@@ -319,12 +346,33 @@ export interface ApiActionMap {
     };
     data: { appointment: Appointment; order: Order };
   };
-  listMyOrders: {
-    payload: Record<string, never>;
-    data: { orders: Order[] };
+  /**
+   * 列出訂單。**權限決定看得到誰的資料**，規則與 `listAppointments` 相同。
+   *
+   * 取代了原本的 `listMyOrders` 與 `adminListOrders`。
+   *
+   * `includeItems` 預設 `true`：展開品項只是**多一次查詢**，不是 N+1 ——
+   * 後端用 `orderItems (uid, createdAt)` 一次撈完再於記憶體分組。
+   * 後台清單不需要明細，傳 `false` 可省下那一次。
+   */
+  listOrders: {
+    payload: Partial<DateRangePayload> &
+      PagedPayload & { uid?: string; status?: string; includeItems?: boolean };
+    data: PagedData & {
+      orders: AdminOrder[];
+      /** 實際採用的區間。未套用區間（查單人全部歷史）時為 `null` */
+      range: { from: string; to: string } | null;
+      /** true 表示品項掃描量觸頂，部分訂單的明細不完整，**必須提示** */
+      truncated: boolean;
+    };
   };
   listMyCoupons: {
-    payload: { includeUsed?: boolean; includeExpired?: boolean };
+    payload: {
+      includeUsed?: boolean;
+      includeExpired?: boolean;
+      /** 未指定時沿用 `includeExpired`。「已過期」與「券被停用」是兩件事 */
+      includeDisabled?: boolean;
+    };
     data: { coupons: MyCoupon[] };
   };
   claimCoupon: {
@@ -363,9 +411,17 @@ export interface ApiActionMap {
     };
     data: { productId: string; updated: boolean; version?: number };
   };
+  /**
+   * 切換啟用狀態。
+   *
+   * `expectedVersion` 選填但**應該要帶**：它是「我看到的是版本 N」的宣告，
+   * 不符時後端回 `PRODUCT_CHANGED` 並附上當前產品，避免管理員根據已經
+   * 過期的畫面做決定（例如以為在停用一個 1800 元的產品，其實別人剛改成
+   * 2200）。少了它，那道防呆就等於沒接上電。
+   */
   adminSetProductEnabled: {
-    payload: { productId: string; enabled: boolean };
-    data: { productId: string; enabled: boolean };
+    payload: { productId: string; enabled: boolean; expectedVersion?: number };
+    data: { productId: string; enabled: boolean; version?: number };
   };
 
   // --- 管理員：營業時間 ---
@@ -396,8 +452,19 @@ export interface ApiActionMap {
       /** 清除例外，恢復週循環 */
       clear?: boolean;
     };
-    /** 改成公休**不會**自動取消既有預約，只回報筆數供人工處理 */
-    data: { date: string; closed?: boolean; existingAppointmentCount?: number };
+    /**
+     * 改成公休**不會**自動取消既有預約，只回報筆數供人工處理。
+     *
+     * `existingAppointmentCount` 是**真的落在新營業區間之外**的筆數，
+     * 不是當天的總筆數 —— 縮短半小時營業時間時，兩者差很多。
+     * 當天總筆數看 `dayAppointmentCount`。
+     */
+    data: {
+      date: string;
+      closed?: boolean;
+      existingAppointmentCount?: number;
+      dayAppointmentCount?: number;
+    };
   };
 
   // --- 管理員：優惠券定義 ---
@@ -538,15 +605,6 @@ export interface ApiActionMap {
       truncated: boolean;
     };
   };
-  adminListOrders: {
-    payload: Partial<DateRangePayload> & PagedPayload & { status?: string };
-    data: PagedData & { orders: AdminOrder[] };
-  };
-  adminListAppointments: {
-    payload: Partial<DateRangePayload> & PagedPayload & { status?: string };
-    data: PagedData & { appointments: AdminAppointment[] };
-  };
-
   /**
    * 標記完成並認列收款。**完成即收款** —— 沒有金流，錢是現場收的，
    * 服務做完卻沒收到錢在實務上就是還沒結案，那筆預約留在待結案即可。
@@ -617,26 +675,38 @@ export interface ApiActionMap {
       coupons: (Grant & { name?: string; status?: string })[];
     };
   };
+  /**
+   * 維護會員資料，**含角色**。
+   *
+   * 角色原本是獨立的 `adminSetUserRole`，已併入這裡。拆成兩支只有一個
+   * 呼叫端、卻多了「只成功一半」的風險：第二支失敗時前一支已經寫進
+   * Firestore，畫面卻顯示儲存失敗。合併後全部欄位在同一個 commit 內生效。
+   *
+   * 兩道自我保護：不可停用自己（`status`）、不可變更自己的角色（`role`）。
+   * 後者**只在 role 真的有變動時**才觸發，否則管理員連自己的電話都改不了。
+   */
   adminUpdateCustomer: {
-    /** 不可停用自己 */
     payload: {
       uid: string;
       phone?: string;
       note?: string;
       sourceChannel?: string;
       status?: UserStatus;
+      role?: UserRole;
     };
-    data: { uid: string; updated: boolean };
+    /** `roleChanged` 為 true 時後端另外寫了一筆 `update_user_role` 稽核紀錄 */
+    data: { uid: string; updated: boolean; roleChanged: boolean };
   };
-  /** 部分更新。圖片與連結允許空字串（清除），有值則必須是 https */
+  /**
+   * 部分更新。圖片與連結允許空字串（清除），有值則必須是 https。
+   *
+   * `backgroundGradient` 同樣有驗證：只接受 `linear-gradient(...)` 這類
+   * 漸層函式，且不可含 `url(` —— 否則管理員可以讓網站對所有訪客載入
+   * 第三方資源，那台主機因此拿得到每位訪客的 IP。
+   */
   adminUpdateSiteSettings: {
     payload: Partial<Omit<ApiActionMap['getSiteSettings']['data']['site'], 'configured'>>;
     data: ApiActionMap['getSiteSettings']['data'];
-  };
-
-  adminSetUserRole: {
-    payload: { uid: string; role: UserRole };
-    data: { uid: string; role: UserRole; changed: boolean };
   };
 }
 

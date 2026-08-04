@@ -25,7 +25,10 @@ export default function MyOrdersPage() {
   const load = useCallback(async () => {
     setError('');
     try {
-      const data = await callApi('listMyOrders', {});
+      // 不帶 uid：後端對非管理員一律強制查自己。
+      // 也不帶日期區間 —— 指定了對象時區間才是選填，顧客要看得到全部歷史。
+      // 品項預設會展開，且只多一次查詢（後端已修掉 N+1）
+      const data = await callApi('listOrders', { limit: 200 });
       setOrders(data.orders);
     } catch (err) {
       setError(isApiError(err) ? err.message : '載入訂單失敗，請稍後再試。');

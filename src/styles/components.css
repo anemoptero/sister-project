@@ -1987,3 +1987,65 @@ button.danger:hover:not(:disabled) {
 .app-shell > main {
   flex: 1;
 }
+
+/* ==========================================================================
+   前端分頁
+   ========================================================================== */
+
+/*
+ * 只負責「顯示哪一段」。統計與搜尋一律在完整資料上做，
+ * 因此切頁不會讓任何數字變動 —— 見 src/api/fetchAll.ts。
+ */
+.pagination {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.pagination-summary {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pagination-page select {
+  width: auto;
+  min-width: 6rem;
+  margin: 0;
+}
+
+.pagination-total {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 只給輔助技術讀，視覺上完全不佔位 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 必填標記。用 aria-hidden 隱藏於輔助技術，語意由 input[required] 承擔 */
+.required-mark {
+  margin-left: 0.15em;
+  color: var(--color-danger, #b3261e);
+}

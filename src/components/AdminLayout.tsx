@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 
@@ -45,7 +46,21 @@ export function AdminLayout() {
       </header>
 
       <main>
-        <Outlet />
+        {/*
+          後台各頁是 lazy 載入的（見 App.tsx），第一次進某頁時要先抓一個
+          小 chunk。Suspense 包在這裡而不是路由外層 —— 包在外層會讓整個
+          導覽列在載入期間消失，看起來像整頁閃了一下。
+        */}
+        <Suspense
+          fallback={
+            <div className="page">
+              <div className="skeleton" />
+              <div className="skeleton" />
+            </div>
+          }
+        >
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   );

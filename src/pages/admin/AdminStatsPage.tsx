@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { callApi, isApiError } from '../../api/client';
+import { useLatestRequest } from '../../api/useLatestRequest';
 import { BarChart } from '../../components/BarChart';
 import type { ApiDataOf } from '../../types/api';
 import type { StatsGroupBy } from '../../types/models';
@@ -37,7 +38,13 @@ export default function AdminStatsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState('');
 
+  const isLatest = useLatestRequest();
+
   const load = useCallback(async () => {
+    // 連按兩次區間預設會有兩個請求在飛，Apps Script 的回應順序不保證。
+    // 舊的晚回時要丟掉，否則圖表畫的是上一個區間、篩選器卻寫著新的
+    const stillLatest = isLatest();
+
     setError('');
     setStats(null);
     try {
@@ -46,11 +53,13 @@ export default function AdminStatsPage() {
         to: range.to,
         groupBy
       });
+      if (!stillLatest()) return;
       setStats(data);
     } catch (err) {
+      if (!stillLatest()) return;
       setError(isApiError(err) ? err.message : '載入統計失敗。');
     }
-  }, [range, groupBy]);
+  }, [range, groupBy, isLatest]);
 
   useEffect(() => {
     void load();

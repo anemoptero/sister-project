@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { callApi, isApiError } from '../../api/client';
+import { fetchAll } from '../../api/fetchAll';
 import { StatTile } from '../../components/StatTile';
 import type { AdminAppointment, AdminOrder, WeeklyBusinessHour } from '../../types/models';
 import { businessDayRange } from '../../utils/businessDays';
@@ -41,29 +42,43 @@ export default function AdminHomePage() {
     const now = new Date();
     const lookback = new Date(now.getTime() - OVERDUE_LOOKBACK_DAYS * 86_400_000);
 
+    // 三份都整批抓回：待收金額是在前端加總的，只抓一頁會靜默少算
     const [nearResult, overdueResult, orderResult] = await Promise.allSettled([
-      callApi('adminListAppointments', {
-        from: range.from.toISOString(),
-        to: range.to.toISOString(),
-        status: 'booked',
-        limit: 200
+      fetchAll<AdminAppointment>(async (cursor) => {
+        const data = await callApi('listAppointments', {
+          from: range.from.toISOString(),
+          to: range.to.toISOString(),
+          status: 'booked',
+          limit: 1000,
+          ...(cursor ? { cursor } : {})
+        });
+        return { items: data.appointments, nextCursor: data.nextCursor };
       }),
-      callApi('adminListAppointments', {
-        from: lookback.toISOString(),
-        to: now.toISOString(),
-        status: 'booked',
-        limit: 200
+      fetchAll<AdminAppointment>(async (cursor) => {
+        const data = await callApi('listAppointments', {
+          from: lookback.toISOString(),
+          to: now.toISOString(),
+          status: 'booked',
+          limit: 1000,
+          ...(cursor ? { cursor } : {})
+        });
+        return { items: data.appointments, nextCursor: data.nextCursor };
       }),
-      callApi('adminListOrders', {
-        from: lookback.toISOString(),
-        to: range.to.toISOString(),
-        limit: 200
+      fetchAll<AdminOrder>(async (cursor) => {
+        const data = await callApi('listOrders', {
+          from: lookback.toISOString(),
+          to: range.to.toISOString(),
+          limit: 1000,
+          includeItems: false,
+          ...(cursor ? { cursor } : {})
+        });
+        return { items: data.orders, nextCursor: data.nextCursor };
       })
     ]);
 
     if (nearResult.status === 'fulfilled') {
       // 後端以 startAt 遞減排序，但行程要由早看到晚
-      setUpcoming(sortByStart(nearResult.value.appointments));
+      setUpcoming(sortByStart(nearResult.value));
     } else {
       setUpcoming([]);
       setError(isApiError(nearResult.reason) ? nearResult.reason.message : '載入行程失敗。');
@@ -73,11 +88,7 @@ export default function AdminHomePage() {
       // 用結束時間再篩一次：查詢是以 startAt 為界，
       // 今天稍早開始但還沒結束的預約不算逾期
       setOverdue(
-        sortByStart(
-          overdueResult.value.appointments.filter(
-            (a) => new Date(a.endAt).getTime() < Date.now()
-          )
-        )
+        sortByStart(overdueResult.value.filter((a) => new Date(a.endAt).getTime() < Date.now()))
       );
     } else {
       setOverdue([]);
@@ -85,7 +96,7 @@ export default function AdminHomePage() {
 
     if (orderResult.status === 'fulfilled') {
       const map: Record<string, AdminOrder> = {};
-      orderResult.value.orders.forEach((order) => {
+      orderResult.value.forEach((order) => {
         if (order.appointmentId) map[order.appointmentId] = order;
       });
       setOrdersById(map);

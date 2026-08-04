@@ -38,8 +38,29 @@ export default function ProfilePage() {
       if (phone !== (user?.phone ?? '')) payload.phone = phone;
       if (displayName !== (user?.displayName ?? '')) payload.displayName = displayName;
 
-      if (!payload.phone && !payload.displayName) {
+      /**
+       * ⚠️ 判斷 **key 是否存在**，不是值是否為真。
+       *
+       * 這裡原本寫成 `!payload.phone && !payload.displayName`。使用者把
+       * 稱呼清空後，`payload.displayName = ''` 是 falsy，於是被當成「沒填」→
+       * 顯示「沒有任何變更」並中止，但他確實改了 —— 從他的角度看就是
+       * 按鈕壞了，而且畫面上還說他什麼都沒做。
+       */
+      if (!('phone' in payload) && !('displayName' in payload)) {
         setError('沒有任何變更。');
+        return;
+      }
+
+      // 空值在前端先擋，訊息才說得出「為什麼」。
+      // 後端也會擋（那才是防線），但它只知道欄位名，給不出這種說明。
+      if (payload.phone !== undefined && !payload.phone.trim()) {
+        setErrorField('phone');
+        setError('電話為必填，工作室需要能在臨時改期時聯絡到你。');
+        return;
+      }
+      if (payload.displayName !== undefined && !payload.displayName.trim()) {
+        setErrorField('displayName');
+        setError('稱呼不能空白，後台需要能認出你是哪一位。');
         return;
       }
 
@@ -93,16 +114,25 @@ export default function ProfilePage() {
         </div>
 
         <div className="field">
-          <label htmlFor="displayName">稱呼</label>
+          <label htmlFor="displayName">
+            稱呼<span className="required-mark" aria-hidden="true">*</span>
+          </label>
           <input
             id="displayName"
             name="displayName"
             type="text"
+            /* 用 aria-required 而非 required：原生驗證會攔下 submit，
+               我們自己那句「後台需要能認出你是哪一位」就沒機會顯示。
+               LINE 內建瀏覽器的原生提示氣泡樣式也不一致 */
+            aria-required="true"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             aria-invalid={errorField === 'displayName'}
           />
-          <p className="hint">預設是你的 LINE 名稱，可改成方便辨識的稱呼。</p>
+          <p className="hint">
+            預設是你的 LINE 名稱，可改成方便辨識的稱呼。不能空白 ——
+            工作室要靠它認出是哪一位。
+          </p>
         </div>
 
         {error && <p className="error">{error}</p>}

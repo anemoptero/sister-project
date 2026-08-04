@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { callApi, isApiError, validationField } from '../../api/client';
+import { PAGE_SIZE, fetchAll, pageSlice } from '../../api/fetchAll';
 import { Modal } from '../../components/Modal';
+import { Pagination } from '../../components/Pagination';
 import type { ApiDataOf } from '../../types/api';
 import type { AdminCustomer, UserRole, UserStatus } from '../../types/models';
 import { useAuth } from '../../auth/useAuth';
@@ -15,32 +17,94 @@ const SORT_LABELS: Record<SortBy, string> = {
   lastOrderAt: '最近消費'
 };
 
+/**
+ * 搜尋比對的欄位，與後端 `adminListCustomers` 的 `keyword` 過濾一致
+ * （名稱、電話、Email）。另外多比對備註 —— 備註存的常常就是本名，
+ * 而管理員想找的正是那個。
+ */
+function matches(customer: AdminCustomer, keyword: string): boolean {
+  const lower = keyword.toLowerCase();
+  return (
+    customer.displayName.toLowerCase().includes(lower) ||
+    customer.phone.includes(keyword) ||
+    customer.email.toLowerCase().includes(lower) ||
+    customer.note.toLowerCase().includes(lower)
+  );
+}
+
+function compare(a: AdminCustomer, b: AdminCustomer, sortBy: SortBy): number {
+  if (sortBy === 'totalPaidAmount') return b.totalPaidAmount - a.totalPaidAmount;
+  if (sortBy === 'totalOrderCount') return b.totalOrderCount - a.totalOrderCount;
+  // 時間欄位是已正規化為 +08:00 的 ISO 字串，字典序即時間先後。
+  // 空字串（從未消費）自然排到最後，這正是想要的
+  if (sortBy === 'lastOrderAt') return b.lastOrderAt.localeCompare(a.lastOrderAt);
+  return b.createdAt.localeCompare(a.createdAt);
+}
+
+/**
+ * 會員管理。
+ *
+ * ## 搜尋與排序都在前端做
+ *
+ * 資料一次整批抓回（`fetchAll`），搜尋與排序都是對已載入的陣列操作，
+ * **打字不會打 API**。原本是把 `keyword` 直接綁在 input 的 onChange 上，
+ * 輸入「王小明」會發出三次請求、每次 1～14 秒，而且每次都先
+ * `setCustomers(null)` 讓表格閃回骨架。更糟的是沒有請求序號控制 ——
+ * 較早送出的慢請求可能晚回並覆蓋正確結果，畫面清單與搜尋框內容對不上。
+ *
+ * 改成前端過濾之後，這三個問題是從源頭消失，不是被緩解。
+ *
+ * 後端的 `keyword` 與 `sortBy` 參數刻意保留不移除 —— 那是資料量成長到
+ * 需要後端分頁時的回頭路。
+ */
 export default function AdminCustomersPage() {
   const [customers, setCustomers] = useState<AdminCustomer[] | null>(null);
   const [keyword, setKeyword] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('createdAt');
+  const [page, setPage] = useState(1);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [detailUid, setDetailUid] = useState('');
 
+  /**
+   * 只在掛載與儲存後執行。
+   *
+   * 相依陣列刻意是空的：`keyword` 與 `sortBy` 不再影響請求，
+   * 把它們加進來只會讓每次打字都重新載入。
+   */
   const load = useCallback(async () => {
     setError('');
     setCustomers(null);
     try {
-      const data = await callApi('adminListCustomers', {
-        ...(keyword ? { keyword } : {}),
-        sortBy,
-        limit: 200
+      const all = await fetchAll<AdminCustomer>(async (cursor) => {
+        const data = await callApi('adminListCustomers', {
+          limit: 1000,
+          ...(cursor ? { cursor } : {})
+        });
+        return { items: data.customers, nextCursor: data.nextCursor };
       });
-      setCustomers(data.customers);
+      setCustomers(all);
     } catch (err) {
       setError(isApiError(err) ? err.message : '載入會員失敗。');
     }
-  }, [keyword, sortBy]);
+  }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const visible = useMemo(() => {
+    const all = customers ?? [];
+    const filtered = keyword.trim() ? all.filter((c) => matches(c, keyword.trim())) : all;
+    return [...filtered].sort((a, b) => compare(a, b, sortBy));
+  }, [customers, keyword, sortBy]);
+
+  // 篩選條件變動後停在第 5 頁會看到空白。回到第一頁是唯一合理的行為
+  useEffect(() => {
+    setPage(1);
+  }, [keyword, sortBy]);
+
+  const rows = pageSlice(visible, page);
 
   return (
     <div className="page">
@@ -54,7 +118,7 @@ export default function AdminCustomersPage() {
               id="cust-keyword"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              placeholder="名稱或電話"
+              placeholder="名稱、電話或備註"
             />
           </div>
 
@@ -85,60 +149,74 @@ export default function AdminCustomersPage() {
         </>
       )}
 
-      {customers?.length === 0 && (
+      {customers && visible.length === 0 && (
         <div className="empty-state">
           <h2>沒有符合的會員</h2>
-          <p>會員要先用 LINE 登入過一次，系統才會建立帳號。</p>
+          <p>
+            {keyword.trim()
+              ? '換個關鍵字試試，搜尋會比對名稱、電話與備註。'
+              : '會員要先用 LINE 登入過一次，系統才會建立帳號。'}
+          </p>
         </div>
       )}
 
-      {customers && customers.length > 0 && (
-        <div className="table-scroll">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>會員</th>
-                <th>電話</th>
-                <th>來源</th>
-                <th>消費次數</th>
-                <th>累積消費</th>
-                <th>最近消費</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {customers.map((customer) => (
-                <tr
-                  key={customer.uid}
-                  className={customer.status === 'active' ? '' : 'row-disabled'}
-                >
-                  <td>
-                    {customer.displayName || '（未命名）'}
-                    {customer.role === 'admin' && <span className="tag">管理員</span>}
-                    {customer.note && <div className="hint cell-sub">{customer.note}</div>}
-                  </td>
-                  <td>{customer.phone || '—'}</td>
-                  <td>{customer.sourceChannel || '—'}</td>
-                  <td>{customer.totalOrderCount}</td>
-                  <td>{formatPrice(customer.totalPaidAmount)}</td>
-                  <td>{customer.lastOrderAt ? formatDateTime(customer.lastOrderAt) : '—'}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="secondary small"
-                      onClick={() => {
-                        setMessage('');
-                        setDetailUid(customer.uid);
-                      }}
-                    >
-                      詳情
-                    </button>
-                  </td>
+      {customers && visible.length > 0 && (
+        <>
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>會員</th>
+                  <th>電話</th>
+                  <th>來源</th>
+                  <th>消費次數</th>
+                  <th>累積消費</th>
+                  <th>最近消費</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((customer) => (
+                  <tr
+                    key={customer.uid}
+                    className={customer.status === 'active' ? '' : 'row-disabled'}
+                  >
+                    <td>
+                      {customer.displayName || '（未命名）'}
+                      {customer.role === 'admin' && <span className="tag">管理員</span>}
+                      {customer.note && <div className="hint cell-sub">{customer.note}</div>}
+                    </td>
+                    <td>{customer.phone || '—'}</td>
+                    <td>{customer.sourceChannel || '—'}</td>
+                    <td>{customer.totalOrderCount}</td>
+                    <td>{formatPrice(customer.totalPaidAmount)}</td>
+                    <td>{customer.lastOrderAt ? formatDateTime(customer.lastOrderAt) : '—'}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="secondary small"
+                        onClick={() => {
+                          setMessage('');
+                          setDetailUid(customer.uid);
+                        }}
+                      >
+                        詳情
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <Pagination
+            total={visible.length}
+            page={page}
+            onChange={setPage}
+            pageSize={PAGE_SIZE}
+            unit="位會員"
+          />
+        </>
       )}
 
       <p className="hint">
@@ -209,6 +287,13 @@ function CustomerDetail({
 
   const isSelf = me?.uid === uid;
 
+  /**
+   * `deleted` 目前沒有任何流程會產生，但真的出現時**不可讓下拉選單改掉它**。
+   * 下拉沒有對應的 option 會落到 selectedIndex = -1 顯示空白，管理員一碰
+   * 就把 deleted 悄悄變成 active，而且畫面上完全看不出發生過什麼事。
+   */
+  const isDeleted = status === 'deleted';
+
   async function handleSave() {
     if (!detail) return;
     setSaving(true);
@@ -216,18 +301,19 @@ function CustomerDetail({
     setErrorField('');
 
     try {
+      // 一支 API 一次寫完，含角色。
+      // 原本角色是另一支 adminSetUserRole，第二支失敗時前面的欄位
+      // 已經寫進 Firestore，畫面卻顯示「儲存失敗」—— 管理員重試時
+      // 會以為前面的也沒存。合併後中途失敗在結構上不可能發生。
       await callApi('adminUpdateCustomer', {
         uid,
         phone,
         note,
         sourceChannel,
-        status
+        // deleted 不可經由這個表單改動
+        ...(isDeleted ? {} : { status }),
+        role
       });
-
-      // 角色是另一支 API，只在真的變動時才呼叫
-      if (role !== detail.user.role) {
-        await callApi('adminSetUserRole', { uid, role });
-      }
 
       onSaved(`已更新「${detail.user.displayName || uid}」的資料。`);
     } catch (err) {
@@ -309,16 +395,27 @@ function CustomerDetail({
 
           <div className="field">
             <label htmlFor="cd-status">帳號狀態</label>
-            <select
-              id="cd-status"
-              value={status}
-              disabled={isSelf}
-              onChange={(e) => setStatus(e.target.value as UserStatus)}
-            >
-              <option value="active">正常</option>
-              <option value="disabled">停用</option>
-            </select>
-            {isSelf && <p className="hint">不能停用自己的帳號。</p>}
+            {isDeleted ? (
+              <>
+                <input id="cd-status" value="已刪除" readOnly disabled />
+                <p className="hint">
+                  已刪除的帳號不可由此變更。這個狀態目前只會在帳戶合併時產生。
+                </p>
+              </>
+            ) : (
+              <>
+                <select
+                  id="cd-status"
+                  value={status}
+                  disabled={isSelf}
+                  onChange={(e) => setStatus(e.target.value as UserStatus)}
+                >
+                  <option value="active">正常</option>
+                  <option value="disabled">停用</option>
+                </select>
+                {isSelf && <p className="hint">不能停用自己的帳號。</p>}
+              </>
+            )}
           </div>
 
           <div className="field">

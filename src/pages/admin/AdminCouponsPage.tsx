@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { callApi, isApiError, validationField } from '../../api/client';
+import { fetchAll } from '../../api/fetchAll';
 import type { ApiActionMap } from '../../types/api';
 import type { Coupon, Product } from '../../types/models';
 import { formatPrice } from '../../utils/format';
@@ -39,12 +40,20 @@ export default function AdminCouponsPage() {
   const load = useCallback(async () => {
     setError('');
     try {
-      // 券與產品互不相依，平行取回省一次往返
-      const [couponData, productData] = await Promise.all([
-        callApi('adminListCoupons', { limit: 100 }),
+      // 券與產品互不相依，平行取回省一次往返。
+      // 券整批抓回 —— 分頁少掉的那幾張在畫面上完全看不出來，
+      // 而管理員會以為那張券不存在而重複建立一張同名的
+      const [couponList, productData] = await Promise.all([
+        fetchAll<Coupon>(async (cursor) => {
+          const data = await callApi('adminListCoupons', {
+            limit: 1000,
+            ...(cursor ? { cursor } : {})
+          });
+          return { items: data.coupons, nextCursor: data.nextCursor };
+        }),
         callApi('listProducts', { includeDisabled: true })
       ]);
-      setCoupons(couponData.coupons);
+      setCoupons(couponList);
       setProducts(productData.products);
     } catch (err) {
       setError(isApiError(err) ? err.message : '載入優惠券失敗。');

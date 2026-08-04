@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { isoToLocalInput, localInputToIso } from '../../utils/datetime';
 
 export interface DateRange {
@@ -21,13 +22,51 @@ const PRESETS: { label: string; days: number }[] = [
 /**
  * 日期區間篩選，訂單／預約／統計三頁共用。
  *
- * 篩選控制項集中在圖表與清單上方一列，切換條件時不需要在頁面裡找。
+ * ## 為什麼手動輸入是 onBlur 而不是 onChange
+ *
+ * `<input type="datetime-local">` 在使用者還沒打完時就會觸發 change，
+ * 而且**值不完整時瀏覽器回傳空字串**。綁在 onChange 上的話，改個日期的
+ * 過程中會先送出一次 `from: ''` 的查詢 —— 那不只是浪費一次 1～14 秒的
+ * 往返，回來的還是錯的區間。
+ *
+ * 改用本地 state 承接輸入、離開欄位（或按 Enter）才往上送。
+ *
+ * 與此搭配的是呼叫端的 `useLatestRequest` —— 這裡只減少請求次數，
+ * 「舊請求晚回蓋掉新結果」要由那個守衛處理。
  */
 export function DateRangeFilter({ value, onChange, children }: Props) {
+  const [fromInput, setFromInput] = useState(() => isoToLocalInput(value.from));
+  const [toInput, setToInput] = useState(() => isoToLocalInput(value.to));
+
+  // 外部改變區間（按預設按鈕、或呼叫端重設）時要跟著同步，
+  // 否則輸入框會停在使用者上次手動打的值
+  useEffect(() => {
+    setFromInput(isoToLocalInput(value.from));
+    setToInput(isoToLocalInput(value.to));
+  }, [value.from, value.to]);
+
   function applyPreset(days: number) {
     const to = new Date();
     const from = new Date(to.getTime() - days * 86_400_000);
     onChange({ from: toIso(from), to: toIso(to) });
+  }
+
+  /**
+   * 送出手動輸入的區間。
+   *
+   * 兩邊都必須有值才送 —— 空字串會被後端當成「沒給」而套用預設的近 30 天，
+   * 畫面卻顯示著使用者正在編輯的那個日期，兩者對不上。
+   * 值沒變也不送，避免每次點過欄位都重新查一次。
+   */
+  function commit(nextFrom: string, nextTo: string) {
+    if (!nextFrom || !nextTo) return;
+
+    const from = localInputToIso(nextFrom);
+    const to = localInputToIso(nextTo);
+    if (!from || !to) return;
+    if (from === value.from && to === value.to) return;
+
+    onChange({ from, to });
   }
 
   return (
@@ -51,8 +90,12 @@ export function DateRangeFilter({ value, onChange, children }: Props) {
           <input
             id="range-from"
             type="datetime-local"
-            value={isoToLocalInput(value.from)}
-            onChange={(e) => onChange({ ...value, from: localInputToIso(e.target.value) })}
+            value={fromInput}
+            onChange={(e) => setFromInput(e.target.value)}
+            onBlur={() => commit(fromInput, toInput)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit(fromInput, toInput);
+            }}
           />
         </div>
 
@@ -61,13 +104,19 @@ export function DateRangeFilter({ value, onChange, children }: Props) {
           <input
             id="range-to"
             type="datetime-local"
-            value={isoToLocalInput(value.to)}
-            onChange={(e) => onChange({ ...value, to: localInputToIso(e.target.value) })}
+            value={toInput}
+            onChange={(e) => setToInput(e.target.value)}
+            onBlur={() => commit(fromInput, toInput)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit(fromInput, toInput);
+            }}
           />
         </div>
 
         {children}
       </div>
+
+      <p className="hint">日期改好後點一下別處，或按 Enter 套用。</p>
     </div>
   );
 }

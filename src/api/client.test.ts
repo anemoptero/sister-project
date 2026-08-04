@@ -88,7 +88,7 @@ describe('sessionToken 附加規則', () => {
     setSessionToken('sess_abc.secret');
     fetchSpy.mockResolvedValue(mockResponse({ ok: true, data: { orders: [] } }));
 
-    await callApi('listMyOrders', {});
+    await callApi('listOrders', {});
 
     expect(lastRequestBody().sessionToken).toBe('sess_abc.secret');
   });
@@ -205,7 +205,7 @@ describe('UNAUTHORIZED 的副作用', () => {
       mockResponse({ ok: false, errorCode: 'FORBIDDEN', message: '此操作僅限管理員' })
     );
 
-    await expect(callApi('adminListOrders', {})).rejects.toMatchObject({
+    await expect(callApi('adminGetSalesStats', { from: '', to: '' })).rejects.toMatchObject({
       errorCode: ERROR_CODES.FORBIDDEN
     });
 

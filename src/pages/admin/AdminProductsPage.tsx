@@ -20,8 +20,13 @@ interface Conflict {
   baseline: Product;
   /** 後端回傳的當前內容 */
   current: Product;
-  /** 你這次想套用的修改 */
-  pending: ProductFormValues;
+  /**
+   * 你這次想套用的修改。
+   *
+   * `null` 代表衝突來自列表上的啟用／停用切換，那裡沒有表單值 ——
+   * 要套用的只有 `baseline.enabled` 的反向值。
+   */
+  pending: ProductFormValues | null;
 }
 
 export default function AdminProductsPage() {
@@ -112,17 +117,50 @@ export default function AdminProductsPage() {
     }
   }
 
-  async function handleToggleEnabled(product: Product) {
+  /**
+   * 切換啟用狀態。
+   *
+   * `expectedVersion` 是「我看到的是版本 N」的宣告。少了它，後端那道
+   * 版本檢查就形同沒有 —— 而它防的是這種情況：管理員 A 打開列表看到
+   * 「臉部保養 · 1800 元 · 啟用中」，去接了通電話，這期間 B 把價格改成
+   * 2200，A 回來按下停用。A 是根據已經過期的畫面在做決定。
+   *
+   * 帶上版本號之後，後端會回 `PRODUCT_CHANGED`，管理員先看到 B 的修改
+   * 再決定要不要停用。
+   */
+  function handleToggleEnabled(product: Product) {
     resetFeedback();
+    void applyToggle(product, !product.enabled);
+  }
+
+  /**
+   * @param baseline `expectedVersion` 的來源。衝突後選擇「仍要切換」時
+   *   會換成後端回傳的最新版，否則重送必然再次撞上同一個版本衝突。
+   */
+  async function applyToggle(baseline: Product, enabled: boolean) {
+    setSubmitting(true);
     try {
       await callApi('adminSetProductEnabled', {
-        productId: product.productId,
-        enabled: !product.enabled
+        productId: baseline.productId,
+        enabled,
+        expectedVersion: baseline.version
       });
-      setMessage(`已${product.enabled ? '停用' : '啟用'}「${product.name}」。`);
+      setConflict(null);
+      setMessage(`已${enabled ? '啟用' : '停用'}「${baseline.name}」。`);
       await load();
     } catch (err) {
+      if (isApiError(err)) {
+        const details = productChangedDetails(err);
+        if (details) {
+          // 與編輯表單走同一條路：顯示差異，讓管理員看過再決定。
+          // pending 為 null —— 這裡沒有待送出的表單，只有一個切換
+          setConflict({ baseline, current: details.product, pending: null });
+          return;
+        }
+      }
       applyError(err);
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -137,10 +175,17 @@ export default function AdminProductsPage() {
 
   // --- 版本衝突 ---
   if (conflict) {
+    const isToggle = conflict.pending === null;
+    const toggleTarget = !conflict.baseline.enabled;
+
     return (
       <div className="page">
         <h1>產品已被其他人修改</h1>
-        <p>你開始編輯之後，這個產品被改過。請確認差異後決定怎麼做。</p>
+        <p>
+          {isToggle
+            ? '你看到這份列表之後，這個產品被改過。確認差異後再決定要不要切換。'
+            : '你開始編輯之後，這個產品被改過。請確認差異後決定怎麼做。'}
+        </p>
 
         <ProductDiff before={conflict.baseline} after={conflict.current} />
 
@@ -148,9 +193,16 @@ export default function AdminProductsPage() {
           <button
             type="button"
             disabled={submitting}
-            onClick={() => void handleUpdate(conflict.current, conflict.pending)}
+            onClick={() => {
+              if (conflict.pending) {
+                void handleUpdate(conflict.current, conflict.pending);
+              } else {
+                // 帶最新版本重送，否則必然再撞一次同樣的衝突
+                void applyToggle(conflict.current, toggleTarget);
+              }
+            }}
           >
-            仍要套用我的修改
+            {isToggle ? `仍要${toggleTarget ? '啟用' : '停用'}` : '仍要套用我的修改'}
           </button>
           <button
             type="button"
@@ -159,16 +211,18 @@ export default function AdminProductsPage() {
             onClick={() => {
               // 以最新內容重新編輯，避免又拿舊的 version 去撞一次
               setConflict(null);
-              setMode({ type: 'edit', product: conflict.current });
+              setMode(isToggle ? { type: 'list' } : { type: 'edit', product: conflict.current });
               void load();
             }}
           >
-            放棄我的修改，改用最新內容
+            {isToggle ? '先不切換，回到列表' : '放棄我的修改，改用最新內容'}
           </button>
         </div>
 
         <p className="hint">
-          「仍要套用」會用你剛才填的值覆蓋目前內容，未修改的欄位維持對方改過的值。
+          {isToggle
+            ? '切換只會改動啟用狀態，不會覆蓋對方剛改的其他欄位。'
+            : '「仍要套用」會用你剛才填的值覆蓋目前內容，未修改的欄位維持對方改過的值。'}
         </p>
       </div>
     );

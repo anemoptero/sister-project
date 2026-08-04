@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { callApi, isApiError, validationField } from '../../api/client';
+import { fetchAll } from '../../api/fetchAll';
 import { Modal } from '../../components/Modal';
 import type { ApiActionMap } from '../../types/api';
 import type { AdminCustomer, Campaign, Coupon, CouponGrantType, Grant } from '../../types/models';
@@ -49,14 +50,28 @@ export function CampaignPanel({ coupons }: { coupons: Coupon[] }) {
   const load = useCallback(async () => {
     setError('');
 
-    // 兩者互不相依，其中一支失敗時另一支的結果仍然有用
+    // 兩者互不相依，其中一支失敗時另一支的結果仍然有用。
+    // 會員清單要整批抓回 —— 發放對象的選單本來就是給管理員全選用的，
+    // 少了誰在畫面上完全看不出來
     const [campaignResult, customerResult] = await Promise.allSettled([
-      callApi('adminListCampaigns', {}),
-      callApi('adminListCustomers', { limit: 200 })
+      fetchAll<Campaign>(async (cursor) => {
+        const data = await callApi('adminListCampaigns', {
+          limit: 1000,
+          ...(cursor ? { cursor } : {})
+        });
+        return { items: data.campaigns, nextCursor: data.nextCursor };
+      }),
+      fetchAll<AdminCustomer>(async (cursor) => {
+        const data = await callApi('adminListCustomers', {
+          limit: 1000,
+          ...(cursor ? { cursor } : {})
+        });
+        return { items: data.customers, nextCursor: data.nextCursor };
+      })
     ]);
 
     if (campaignResult.status === 'fulfilled') {
-      setCampaigns(campaignResult.value.campaigns);
+      setCampaigns(campaignResult.value);
     } else {
       setCampaigns([]);
       setError(
@@ -67,7 +82,7 @@ export function CampaignPanel({ coupons }: { coupons: Coupon[] }) {
     }
 
     if (customerResult.status === 'fulfilled') {
-      setRealCustomers(customerResult.value.customers);
+      setRealCustomers(customerResult.value);
     }
   }, []);
 
@@ -254,8 +269,15 @@ function CampaignForm({
 
   const loadGrants = useCallback(async (campaignId: string) => {
     try {
-      const data = await callApi('adminListGrants', { campaignId, limit: 200 });
-      setGrants(data.grants);
+      const all = await fetchAll<Grant>(async (cursor) => {
+        const data = await callApi('adminListGrants', {
+          campaignId,
+          limit: 1000,
+          ...(cursor ? { cursor } : {})
+        });
+        return { items: data.grants, nextCursor: data.nextCursor };
+      });
+      setGrants(all);
     } catch (err) {
       setError(isApiError(err) ? err.message : '載入領取紀錄失敗。');
       setGrants([]);
